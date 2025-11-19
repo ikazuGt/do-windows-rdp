@@ -1,16 +1,14 @@
 #!/bin/bash
 #
-# FINAL WORKING SCRIPT
-# Fixes: "Bad Message", "No such file", and Missing Chrome/DNS
+# DIGITALOCEAN INSTALLER - OFFLINE CHROME - SMART PARTITION
 #
 
-# --- 1. PREPARATION & DEPENDENCIES ---
-echo "Installing necessary tools..."
-# We need 'parted' to get the 'partprobe' command which refreshes the disk list
+# --- 1. INSTALL TOOLS ---
+echo "Installing NTFS and Partition tools..."
 apt-get update -q
 apt-get install -y ntfs-3g parted
 
-# --- 2. SELECT WINDOWS VERSION ---
+# --- 2. CHOOSE WINDOWS ---
 echo "------------------------------------------------"
 echo "Pilih Versi Windows:"
 echo "	1) Windows 2019 (Default - Recommended)"
@@ -29,10 +27,11 @@ case "$PILIHOS" in
 	*) echo "Salah pilih"; exit;;
 esac
 
+# Capture IP details from the Recovery Environment to inject into Windows
 IP4=$(curl -4 -s icanhazip.com)
 GW=$(ip route | awk '/default/ { print $3 }')
 
-# --- 3. CREATE THE WINDOWS SETUP SCRIPT (Runs on first Login) ---
+# --- 3. CREATE STARTUP SCRIPT (Injects into Windows) ---
 cat >/tmp/win_setup.bat<<EOF
 @ECHO OFF
 cd.>%windir%\GetAdmin
@@ -42,15 +41,15 @@ echo CreateObject^("Shell.Application"^).ShellExecute "%~s0", "%*", "", "runas",
 del /f /q "%temp%\Admin.vbs"
 exit /b 2)
 
-REM --- CONFIGURING NETWORK & DNS ---
+REM --- 1. FIX DNS (Using IP detected during install) ---
 netsh -c interface ip set address name="Ethernet" source=static address=$IP4 mask=255.255.240.0 gateway=$GW
 netsh -c interface ip set dnsservers name="Ethernet" source=static address=8.8.8.8 register=primary validate=no
 netsh -c interface ip add dnsservers name="Ethernet" address=8.8.4.4 index=2 validate=no
-REM Backup for different interface names
+REM Fallback for other interface names
 netsh -c interface ip set address name="Ethernet Instance 0" source=static address=$IP4 mask=255.255.240.0 gateway=$GW 2>nul
 netsh -c interface ip set dnsservers name="Ethernet Instance 0" source=static address=8.8.8.8 register=primary validate=no 2>nul
 
-REM --- EXTENDING DISK SPACE ---
+REM --- 2. EXTEND DISK ---
 ECHO SELECT DISK 0 > C:\diskpart.txt
 ECHO LIST PARTITION >> C:\diskpart.txt
 ECHO SELECT PARTITION 2 >> C:\diskpart.txt
@@ -59,79 +58,75 @@ ECHO EXIT >> C:\diskpart.txt
 DISKPART /S C:\diskpart.txt
 del /f /q C:\diskpart.txt
 
-REM --- SETTING RDP PORT TO 22 (Requires Restart later) ---
+REM --- 3. OPEN RDP PORT 22 (Active after next reboot) ---
 netsh advfirewall firewall add rule name="Open Port 22" dir=in action=allow protocol=TCP localport=22
 reg add "HKLM\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v PortNumber /t REG_DWORD /d 22 /f
 
-REM --- INSTALLING CHROME ---
-powershell -Command "Invoke-WebRequest -Uri 'https://dl.google.com/chrome/install/latest/chrome_installer.exe' -OutFile 'C:\chrome_installer.exe'"
-start /wait C:\chrome_installer.exe /silent /install
-del /f /q C:\chrome_installer.exe
+REM --- 4. OFFLINE CHROME INSTALL ---
+powershell -Command "Invoke-WebRequest -Uri 'https://dl.google.com/tag/s/appguid%%3D%%7B8A69D345-D564-463C-AFF1-A69D9E530F96%%7D%%26iid%%3D%%7B104BF221-10C7-17CD-EB6C-119B16421526%%7D%%26lang%%3Den%%26browser%%3D4%%26usagestats%%3D1%%26appname%%3DGoogle%%20Chrome%%26needsadmin%%3Dprefers%%26ap%%3D-arch_x64-statsdef_1%%26installdataindex%%3Dempty/chrome/install/ChromeStandaloneSetup64.exe' -OutFile 'C:\ChromeStandaloneSetup64.exe'"
+start /wait C:\ChromeStandaloneSetup64.exe /silent /install
+del /f /q C:\ChromeStandaloneSetup64.exe
 
-REM --- CLEANUP ---
-msg * "SETUP COMPLETE: Chrome installed, DNS fixed. You can keep using this session. Port 22 will work after your NEXT manual reboot."
+REM --- 5. CLEANUP ---
+msg * "SETUP COMPLETE. Chrome installed. Use Port 3389 for this session. Port 22 works after next reboot."
 cd /d "%ProgramData%/Microsoft/Windows/Start Menu/Programs/Startup"
 del /f /q win_setup.bat
 exit
 EOF
 
-# --- 4. DOWNLOAD AND FLASH ---
-echo "Downloading image and writing to disk..."
+# --- 4. FLASH IMAGE ---
+echo "Downloading and writing image..."
 wget --no-check-certificate -O- $PILIHOS | gunzip | dd of=/dev/vda bs=3M status=progress
 
-# --- 5. CRITICAL FIX: REFRESH PARTITION TABLE ---
-echo "------------------------------------------------"
-echo "FINALIZING DISK STATE..."
-echo "1. Syncing RAM to Disk..."
+# --- 5. REFRESH PARTITION TABLE (Fixes 'No such file') ---
+echo "Flushing cache..."
 sync
-sleep 3
-
-echo "2. Refreshing Partition Table (Fixes 'No such file')..."
-# This command forces Linux to re-read /dev/vda so vda1/vda2 appear
+echo "Refreshing partitions..."
 partprobe /dev/vda
-sleep 10 
+sleep 10
 
 # --- 6. SMART PARTITION DETECTION ---
-# This block decides whether to use vda1 or vda2 based on what actually exists
 if [ -b "/dev/vda2" ]; then
     TARGET="/dev/vda2"
-    echo "Detected Standard Partition: $TARGET"
+    echo "Detected Target: $TARGET"
 elif [ -b "/dev/vda1" ]; then
     TARGET="/dev/vda1"
-    echo "Detected Single Partition: $TARGET"
+    echo "Detected Target: $TARGET"
 else
-    echo "ERROR: No partitions found. The image write failed."
+    echo "ERROR: Disk write failed. No partitions found."
     ls -la /dev/vda*
     exit 1
 fi
 
-# --- 7. REPAIR AND INJECT ---
-echo "3. Repairing NTFS flags on $TARGET..."
+# --- 7. INJECT ---
+echo "Fixing NTFS..."
 ntfsfix $TARGET
 
-echo "4. Mounting and Injecting Setup Script..."
+echo "Mounting and Injecting..."
 mkdir -p /mnt
 mount.ntfs-3g $TARGET /mnt
 
-# Path detection (Handles Case Sensitivity)
 DEST="/mnt/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
 if [ -d "$DEST" ]; then
     cp -f /tmp/win_setup.bat "$DEST/win_setup.bat"
-    echo "SUCCESS: Script injected into Startup folder."
+    echo "Injection Successful."
 else
-    # Try lowercase path if uppercase fails
     cp -f /tmp/win_setup.bat "/mnt/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup/win_setup.bat" 2>/dev/null
-    echo "SUCCESS: Script injected (fallback path)."
 fi
 
 umount /mnt
+
+# --- 8. SHUTDOWN FOR DO CONFIG ---
 echo "------------------------------------------------"
-echo "INSTALLATION DONE."
-echo "Server rebooting in 5 seconds."
-echo "1. Wait 3-5 minutes."
-echo "2. Login RDP Port: 3389"
-echo "3. User: Administrator / Pass: Botol123456789!"
-echo "4. WAIT for the black box (CMD) to finish installing Chrome."
+echo "INSTALLATION FINISHED."
+echo "The VPS will POWER OFF in 5 seconds."
+echo "------------------------------------------------"
+echo "NEXT STEPS (DIGITAL OCEAN):"
+echo "1. Wait for the VPS to turn off."
+echo "2. Go to DO Panel -> Recovery -> Turn OFF Recovery (Boot from Hard Drive)."
+echo "3. Turn ON the Droplet."
+echo "4. Login RDP 3389 (User: Administrator / Pass: Botol123456789!)."
+echo "5. WATCH THE SCREEN: A command prompt will appear to install Chrome."
 echo "------------------------------------------------"
 sleep 5
-reboot
+poweroff
