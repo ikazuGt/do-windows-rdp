@@ -17,8 +17,8 @@ case "$PILIHOS" in
  	5) read -p "Masukkan Link GZ mu : " PILIHOS;;
 	*) echo "pilihan salah"; exit;;
 esac
-echo "Password yang saya buat sudah masuk wordlist bruteforce, silahkan masukkan password yang lebih aman!"
-read -p "Masukkan titit untuk akun Administrator (minimal 12 karakter): " PASSADMIN
+echo "silahkan masukkan password yang lebih aman!"
+read -p "Masukkan password untuk akun Administrator (minimal 12 karakter): " PASSADMIN
 IP4=$(curl -4 -s icanhazip.com)
 GW=$(ip route | awk '/default/ { print $3 }')
 cat >/tmp/net.bat<<EOF
