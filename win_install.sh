@@ -17,8 +17,8 @@ case "$PILIHOS" in
  	5) read -p "Masukkan Link GZ mu : " PILIHOS;;
 	*) echo "pilihan salah"; exit;;
 esac
-echo "Masukkan password baru agar lebih aman"
-read -p "Masukkan password untuk akun Administrator (minimal 12 karakter): " PASSADMIN
+echo "Password yang saya buat sudah masuk wordlist bruteforce, silahkan masukkan password yang lebih aman!"
+read -p "Masukkan titit untuk akun Administrator (minimal 12 karakter): " PASSADMIN
 IP4=$(curl -4 -s icanhazip.com)
 GW=$(ip route | awk '/default/ { print $3 }')
 cat >/tmp/net.bat<<EOF
@@ -53,6 +53,13 @@ netsh -c interface ip set address name="Ethernet Instance 0" source=static addre
 netsh -c interface ip set dnsservers name="Ethernet Instance 0" source=static address=8.8.8.8 register=primary validate=no 2>nul
 netsh -c interface ip add dnsservers name="Ethernet Instance 0" address=8.8.4.4 index=2 validate=no 2>nul
 
+REM Wait a bit for network settings to apply
+timeout 5 >nul
+
+REM Verify DNS settings were applied
+echo Verifying DNS configuration...
+netsh interface ip show dnsservers
+
 cd /d "%ProgramData%/Microsoft/Windows/Start Menu/Programs/Startup"
 del /f /q net.bat
 exit
@@ -79,14 +86,21 @@ if not ERRORLEVEL 1 (
     netsh advfirewall firewall add rule name=%RULE_NAME% dir=in action=allow protocol=TCP localport=%PORT%
 )
 reg add "HKLM\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v PortNumber /t REG_DWORD /d 22 /f
-ECHO SELECT VOLUME=%%SystemDrive%% > "%SystemDrive%\diskpart.extend"
+REM Extend C: drive to use all unallocated space
+ECHO SELECT DISK 0 > "%SystemDrive%\diskpart.extend"
+ECHO LIST PARTITION >> "%SystemDrive%\diskpart.extend"
+ECHO SELECT PARTITION 2 >> "%SystemDrive%\diskpart.extend"
 ECHO EXTEND >> "%SystemDrive%\diskpart.extend"
+ECHO EXIT >> "%SystemDrive%\diskpart.extend"
 START /WAIT DISKPART /S "%SystemDrive%\diskpart.extend"
 del /f /q "%SystemDrive%\diskpart.extend"
+REM Download Chrome installer to Desktop
+powershell -Command "Invoke-WebRequest -Uri 'https://dl.google.com/tag/s/appguid%%3D%%7B8A69D345-D564-463C-AFF1-A69D9E530F96%%7D%%26iid%%3D%%7BC84811D3-133D-1811-15C6-12EC101711FD%%7D%%26lang%%3Den%%26browser%%3D4%%26usagestats%%3D1%%26appname%%3DGoogle%%2520Chrome%%26needsadmin%%3Dprefers%%26ap%%3D-arch_x64-statsdef_1%%26installdataindex%%3Dempty/chrome/install/ChromeStandaloneSetup64.exe' -OutFile '%PUBLIC%\Desktop\ChromeSetup.exe'"
+
 cd /d "%ProgramData%/Microsoft/Windows/Start Menu/Programs/Startup"
 del /f /q dpart.bat
 timeout 50 >nul
-del /f /q ChromeSetup.exe
+echo Chrome installer downloaded to Desktop
 echo JENDELA INI JANGAN DITUTUP
 exit
 EOF
