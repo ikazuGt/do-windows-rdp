@@ -20,7 +20,8 @@ echo "	1) Windows 2019 (Default - Recommended)"
 echo "	2) Windows 10 Super Lite SF"
 echo "	3) Windows 10 Super Lite MF"
 echo "	4) Windows 10 Super Lite CF"
-echo "	5) Custom Link"
+echo "  5) Windows 11"
+echo "	6) Custom Link"
 read -p "Pilih [1]: " PILIHOS
 
 case "$PILIHOS" in
@@ -28,7 +29,8 @@ case "$PILIHOS" in
 	2) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
 	3) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
 	4) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
-	5) read -p "Link GZ: " PILIHOS;;
+	5) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
+	6) read -p "Link GZ: " PILIHOS;;
 	*) echo "Salah pilih"; exit 1;;
 esac
 
