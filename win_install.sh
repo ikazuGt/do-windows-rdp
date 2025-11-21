@@ -20,7 +20,7 @@ echo "	1) Windows 2019 (Default - Recommended)"
 echo "	2) Windows 10 Super Lite SF"
 echo "	3) Windows 10 Super Lite MF"
 echo "	4) Windows 10 Super Lite CF"
-echo "  5) Windows 11"
+echo "	5) Windows 11"
 echo "	6) Custom Link"
 read -p "Pilih [1]: " PILIHOS
 
