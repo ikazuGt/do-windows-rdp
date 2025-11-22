@@ -1,11 +1,14 @@
 #!/bin/bash
 #
-# DIGITALOCEAN WINDOWS INSTALLER - VERBOSE/DEBUG MODE
+# DIGITALOCEAN WINDOWS INSTALLER - DEBUGGED & FIXED
 # Date: 2025-11-22
-# Features: Pre-downloaded Chrome, Auto-Network Fix, Detailed Logging
+# Fixes:
+#   1. PowerShell "Array" Crash (Select-Object -First 1)
+#   2. Dual-Injection (ProgramData + AppData) for Lite OS compatibility
+#   3. Aggressive NTFS Mounting (Force RW)
 #
 
-# Function to print colorful status messages
+# --- COLOR LOGGING FUNCTIONS ---
 function log_info() { echo -e "\e[34m[INFO]\e[0m $1"; }
 function log_success() { echo -e "\e[32m[OK]\e[0m $1"; }
 function log_error() { echo -e "\e[31m[ERROR]\e[0m $1"; }
@@ -13,44 +16,40 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo "   WINDOWS INSTALLER - DETAILED LOGGING VERSION     "
+echo "   WINDOWS INSTALLER - FINAL FIXED VERSION          "
 echo "===================================================="
 
-# --- 1. Install Dependencies ---
-log_step "STEP 1: Installing System Dependencies"
+# --- 1. INSTALL DEPENDENCIES ---
+log_step "STEP 1: Installing Dependencies"
 export DEBIAN_FRONTEND=noninteractive
-# Removed -qq to show output, added error check
-apt-get update
-apt-get install -y ntfs-3g parted psmisc curl wget || { log_error "Failed to install dependencies"; exit 1; }
-log_success "Dependencies installed."
+apt-get update -q
+apt-get install -y ntfs-3g parted psmisc curl wget || { log_error "Failed to install tools"; exit 1; }
+log_success "System tools installed."
 
-# --- 2. Download Chrome (RAM) ---
-log_step "STEP 2: Pre-downloading Chrome Enterprise (MSI)"
-log_info "Downloading to temporary memory (/tmp/chrome.msi)..."
+# --- 2. DOWNLOAD CHROME (RAM) ---
+log_step "STEP 2: Pre-downloading Chrome (Enterprise MSI)"
+log_info "Downloading to /tmp/chrome.msi..."
 
-# Download with progress bar
-wget --show-progress -O /tmp/chrome.msi "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
+wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 
-if [ -f "/tmp/chrome.msi" ]; then
-    FILESIZE=$(du -h /tmp/chrome.msi | cut -f1)
-    log_success "Chrome Installer downloaded successfully."
-    log_info "File Path: /tmp/chrome.msi"
-    log_info "File Size: $FILESIZE"
+if [ -s "/tmp/chrome.msi" ]; then
+    SIZE=$(du -h /tmp/chrome.msi | cut -f1)
+    log_success "Chrome downloaded successfully ($SIZE)."
 else
-    log_error "Chrome download failed. Check your internet connection."
+    log_error "Chrome download failed (0 bytes). Check internet."
     exit 1
 fi
 
-# --- 3. OS Selection ---
-log_step "STEP 3: Operating System Selection"
-echo "  1) Windows 2019 (Recommended)"
+# --- 3. OS SELECTION ---
+log_step "STEP 3: Select Operating System"
+echo "  1) Windows 2019 (Recommended - Most Stable)"
 echo "  2) Windows 10 Super Lite SF"
 echo "  3) Windows 10 Super Lite MF"
 echo "  4) Windows 10 Super Lite CF"
 echo "  5) Windows 11 Normal"
 echo "  6) Windows 10 Normal"
 echo "  7) Custom Link"
-read -p "Select OS [1]: " PILIHOS
+read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
   1|"") PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2019DO.gz";;
@@ -62,34 +61,27 @@ case "$PILIHOS" in
   7) read -p "Enter Direct Link: " PILIHOS;;
   *) log_error "Invalid selection"; exit 1;;
 esac
-log_info "Selected URL: $PILIHOS"
 
-# --- 4. Network Detection ---
-log_step "STEP 4: Detecting Network Configuration"
+# --- 4. NETWORK DETECTION ---
+log_step "STEP 4: Detecting Network"
 IP4=$(curl -4 -s icanhazip.com)
 GW=$(ip route | awk '/default/ { print $3 }' | head -n1)
 NETMASK="255.255.240.0"
 
-# Fallbacks
 [ -z "$IP4" ] && IP4="192.168.0.100"
 [ -z "$GW" ] && GW="192.168.0.1"
 
-echo "   ----------------------------"
-echo "   IP Address : $IP4"
-echo "   Gateway    : $GW"
-echo "   Netmask    : $NETMASK"
-echo "   ----------------------------"
-log_success "Network configuration captured."
+echo "   ---------------------------"
+echo "   IP: $IP4  |  GW: $GW"
+echo "   ---------------------------"
 
-# --- 5. Create Startup Script ---
-log_step "STEP 5: Generating 'win_setup.bat'"
-log_info "Constructing the PowerShell auto-fix script..."
+# --- 5. GENERATE BATCH FILE ---
+log_step "STEP 5: Generating Setup Script"
+log_info "Creating 'win_setup.bat' with Auto-Fix logic..."
 
-# Note: We use EOF quoted to prevent variable expansion issues if needed, 
-# but here we need variables to expand, so we use standard EOF.
 cat >/tmp/win_setup.bat<<EOF
 @ECHO OFF
-REM --- REQUEST ADMIN PRIVILEGES ---
+REM --- 1. GET ADMIN ---
 cd.>%windir%\\GetAdmin
 if exist %windir%\\GetAdmin (del /f /q "%windir%\\GetAdmin") else (
   echo CreateObject^("Shell.Application"^).ShellExecute "%~s0", "%*", "", "runas", 1 >> "%temp%\\Admin.vbs"
@@ -98,16 +90,11 @@ if exist %windir%\\GetAdmin (del /f /q "%windir%\\GetAdmin") else (
   exit /b 2
 )
 
-REM --- LOGGING START ---
-ECHO Starting Windows Setup > C:\\setup_log.txt
+REM --- 2. NETWORK FIX (BUG FIXED: Select-Object -First 1) ---
+powershell -Command "Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1 | New-NetIPAddress -IPAddress $IP4 -PrefixLength 20 -DefaultGateway $GW -AddressFamily IPv4"
+powershell -Command "Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1 | Set-DnsClientServerAddress -ServerAddresses ('8.8.8.8','8.8.4.4')"
 
-REM --- PART 1: UNIVERSAL NETWORK FIX (PowerShell) ---
-REM This automatically detects the active network card and assigns the IP
-ECHO Configuring Network... >> C:\\setup_log.txt
-powershell -Command "Get-NetAdapter | Where-Object Status -eq 'Up' | New-NetIPAddress -IPAddress $IP4 -PrefixLength 20 -DefaultGateway $GW -AddressFamily IPv4; Get-NetAdapter | Where-Object Status -eq 'Up' | Set-DnsClientServerAddress -ServerAddresses ('8.8.8.8','8.8.4.4')"
-
-REM --- PART 2: DISK EXPANSION ---
-ECHO Extending Disk... >> C:\\setup_log.txt
+REM --- 3. DISK EXTEND ---
 ECHO SELECT DISK 0 > C:\\diskpart.txt
 ECHO LIST PARTITION >> C:\\diskpart.txt
 ECHO SELECT PARTITION 2 >> C:\\diskpart.txt
@@ -118,41 +105,30 @@ ECHO EXIT >> C:\\diskpart.txt
 DISKPART /S C:\\diskpart.txt
 del /f /q C:\\diskpart.txt
 
-REM --- PART 3: FIREWALL ---
-ECHO Opening RDP Ports... >> C:\\setup_log.txt
+REM --- 4. FIREWALL ---
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
 
-REM --- PART 4: INSTALL CHROME (FROM C: DRIVE) ---
-ECHO Installing Chrome... >> C:\\setup_log.txt
+REM --- 5. INSTALL CHROME ---
 if exist "C:\\chrome.msi" (
     msiexec /i "C:\\chrome.msi" /quiet /norestart
     del /f /q "C:\\chrome.msi"
-    ECHO Chrome Installed. >> C:\\setup_log.txt
-) else (
-    ECHO Chrome MSI not found on C root. >> C:\\setup_log.txt
 )
 
-REM --- CLEANUP ---
-ECHO Cleanup... >> C:\\setup_log.txt
-cd /d "%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
-del /f /q win_setup.bat
+REM --- 6. SELF DESTRUCT ---
+del /f /q "%~f0"
 exit
 EOF
 
 if [ -f "/tmp/win_setup.bat" ]; then
-    log_success "Batch script generated at /tmp/win_setup.bat"
+    log_success "Batch script created successfully."
 else
-    log_error "Failed to generate batch script."
+    log_error "Failed to create batch script."
     exit 1
 fi
 
-# --- 6. Write Image ---
-log_step "STEP 6: Writing Windows Image to Disk"
-log_info "Unmounting active partitions..."
+# --- 6. WRITE IMAGE ---
+log_step "STEP 6: Writing OS to Disk (Please Wait)"
 umount -f /dev/vda* 2>/dev/null
-
-log_info "Starting Download & Write stream..."
-log_info "WARNING: This will take time. Please wait."
 
 if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
   wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
@@ -160,116 +136,84 @@ else
   wget --no-check-certificate -O- "$PILIHOS" | dd of=/dev/vda bs=4M status=progress
 fi
 
-echo ""
-log_info "Syncing disk cache..."
 sync
-sleep 2
+sleep 3
 
-# --- 7. Partition Logic ---
-log_step "STEP 7: Partition Detection & Mounting"
-log_info "Reloading partition table..."
+# --- 7. PARTITION & MOUNT ---
+log_step "STEP 7: Mounting Windows Partition"
+log_info "Probing partitions..."
 partprobe /dev/vda
 sleep 5
 
-# Loop to find partition
-MAX_RETRIES=10
-COUNT=1
+# Retry loop
 TARGET=""
-
-while [ $COUNT -le $MAX_RETRIES ]; do
-    if [ -b /dev/vda2 ]; then
-        TARGET="/dev/vda2"
-        break
-    elif [ -b /dev/vda1 ]; then
-        TARGET="/dev/vda1"
-        break
-    fi
-    echo "   Attempt $COUNT/$MAX_RETRIES: Waiting for Windows partition..."
-    sleep 3
+for i in {1..10}; do
+    if [ -b /dev/vda2 ]; then TARGET="/dev/vda2"; break; fi
+    if [ -b /dev/vda1 ]; then TARGET="/dev/vda1"; break; fi
+    echo "   Waiting for partition... ($i/10)"
+    sleep 2
     partprobe /dev/vda
-    COUNT=$((COUNT+1))
 done
 
 if [ -z "$TARGET" ]; then
-    log_error "Partition not found after $MAX_RETRIES attempts."
-    log_error "The image likely failed to write or is corrupt."
+    log_error "Partition not found. Image write failed."
     exit 1
 fi
 
-log_success "Windows Partition Found: $TARGET"
+log_success "Partition Found: $TARGET"
 
-log_info "Fixing NTFS Dirty Flags..."
-ntfsfix -d "$TARGET"
+log_info "Forcing clean NTFS state..."
+ntfsfix -d "$TARGET" > /dev/null 2>&1
 
-log_info "Mounting partition..."
+log_info "Mounting (RW Mode)..."
 mkdir -p /mnt/windows
-mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows
+# Try standard, then force
+mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
 
 if mountpoint -q /mnt/windows; then
-    log_success "Mounted successfully."
+    log_success "Drive C: Mounted."
 else
-    log_error "Mount failed."
+    log_error "Failed to mount Windows partition."
     exit 1
 fi
 
-# --- 8. Injection ---
-log_step "STEP 8: Injecting Files"
-DEST="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
+# --- 8. INJECT FILES ---
+log_step "STEP 8: Injecting Setup Files"
 
-# Ensure directory exists
-if [ ! -d "$DEST" ]; then
-    log_info "Startup folder not found, creating it..."
-    mkdir -p "$DEST"
-fi
+# Paths
+PATH_ALL_USERS="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
+PATH_ADMIN="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
 
-# Inject Batch File
-log_info "Copying 'win_setup.bat' to Startup..."
-cp -f /tmp/win_setup.bat "$DEST/win_setup.bat"
+# Ensure folders exist
+mkdir -p "$PATH_ALL_USERS"
+mkdir -p "$PATH_ADMIN"
 
-# Verify Batch File
-if [ -f "$DEST/win_setup.bat" ]; then
-    log_success "win_setup.bat injected."
-else
-    log_error "Failed to inject win_setup.bat"
-    exit 1
-fi
+# 1. Inject Chrome MSI to Root
+cp -v /tmp/chrome.msi /mnt/windows/chrome.msi
+[ -f "/mnt/windows/chrome.msi" ] && log_success "Chrome MSI -> C:\\chrome.msi" || log_error "Chrome Copy Failed!"
 
-# Inject Chrome MSI
-log_info "Copying 'chrome.msi' to C:\ Root..."
-cp -f /tmp/chrome.msi /mnt/windows/chrome.msi
+# 2. Inject Batch to All Users
+cp -f /tmp/win_setup.bat "$PATH_ALL_USERS/win_setup.bat"
+[ -f "$PATH_ALL_USERS/win_setup.bat" ] && log_success "Script -> All Users Startup"
 
-# Verify Chrome MSI
-if [ -f "/mnt/windows/chrome.msi" ]; then
-    SIZE=$(du -h /mnt/windows/chrome.msi | cut -f1)
-    log_success "Chrome MSI injected. (Size on disk: $SIZE)"
-else
-    log_error "Failed to inject Chrome MSI."
-    exit 1
-fi
+# 3. Inject Batch to Administrator (Fallback)
+cp -f /tmp/win_setup.bat "$PATH_ADMIN/win_setup.bat"
+[ -f "$PATH_ADMIN/win_setup.bat" ] && log_success "Script -> Administrator Startup"
 
-# List files for user verification
-echo ""
-echo "--- VERIFICATION OF C:\ ---"
-ls -lh /mnt/windows/chrome.msi
-echo "--- VERIFICATION OF STARTUP ---"
-ls -lh "$DEST/win_setup.bat"
-echo "---------------------------"
-
-# --- 9. Finish ---
-log_step "STEP 9: Finalizing"
-log_info "Unmounting..."
-umount /mnt/windows
+# --- 9. FINISH ---
+log_step "STEP 9: Cleaning Up"
 sync
+umount /mnt/windows
 
 echo "===================================================="
-echo "   ✅ INSTALLATION COMPLETE "
+echo "      INSTALLATION SUCCESSFUL!                      "
 echo "===================================================="
-echo "1. The Droplet will power off in 5 seconds."
-echo "2. Go to DigitalOcean -> Turn OFF Recovery Mode."
-echo "3. Power ON the Droplet."
-echo "4. Wait ~2 minutes."
-echo "5. Connect via RDP to: $IP4"
+echo " 1. Droplet is powering off now."
+echo " 2. Go to DigitalOcean -> Turn OFF Recovery."
+echo " 3. Power ON."
+echo " 4. Connect RDP: $IP4"
+echo "    Username: Administrator"
+echo "    Password: [Default for your image]"
 echo "===================================================="
-
 sleep 5
 poweroff
