@@ -1,30 +1,34 @@
 #!/bin/bash
 #
-# DIGITALOCEAN INSTALLER - OFFLINE CHROME - CLEAN VERSION
-# No RDP port change, no Remote Settings modifications
-# Date: 2025-11-21
+# DIGITALOCEAN INSTALLER - FIXED & ROBUST
+# Fixes: TLS 1.2 for Chrome, Read-Write Mounts, Partition Detection
+# Date: 2025-11-22
 #
 
-set -e
-
-NETMASK="255.255.240.0"  # Adjust if needed
-
-echo "===================================================="
-echo "Installing tools..."
-echo "===================================================="
-apt-get update -q
-apt-get install -y ntfs-3g parted psmisc curl
+# Don't use set -e globally, we want to handle errors manually for mounting
+# set -e 
 
 echo "===================================================="
-echo "Pilih Versi Windows:"
-echo "  1) Windows 2019 (Default - Recommended)"
+echo "      WINDOWS INSTALLER FOR DIGITALOCEAN            "
+echo "===================================================="
+
+# --- 1. Install Dependencies ---
+echo "[+] Installing dependencies..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get -qq update
+apt-get -qq install -y ntfs-3g parted psmisc curl wget
+
+# --- 2. OS Selection ---
+echo "===================================================="
+echo "Select Windows Version:"
+echo "  1) Windows 2019 (Recommended)"
 echo "  2) Windows 10 Super Lite SF"
 echo "  3) Windows 10 Super Lite MF"
 echo "  4) Windows 10 Super Lite CF"
 echo "  5) Windows 11 Normal"
 echo "  6) Windows 10 Normal"
-echo "  7) Custom Link"
-read -p "Pilih [1]: " PILIHOS
+echo "  7) Custom Link (GZ/ISO)"
+read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
   1|"") PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2019DO.gz";;
@@ -33,27 +37,33 @@ case "$PILIHOS" in
   4) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
   5) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
   6) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
-  7) read -p "Link GZ: " PILIHOS;;
-  *) echo "Salah pilih"; exit 1;;
+  7) read -p "Enter Direct Link: " PILIHOS;;
+  *) echo "Invalid selection"; exit 1;;
 esac
 
+# --- 3. Network Detection ---
 echo "===================================================="
-echo "Detecting Network Configuration..."
-echo "===================================================="
-IP4=$(curl -4 -s icanhazip.com || echo "192.168.1.100")
+echo "[+] Detecting Network..."
+IP4=$(curl -4 -s icanhazip.com)
 GW=$(ip route | awk '/default/ { print $3 }' | head -n1)
-[ -z "$GW" ] && GW="192.168.1.1"
+NETMASK="255.255.240.0" # Standard DO Netmask
 
-echo "IP: $IP4"
-echo "Gateway: $GW"
-echo "Netmask: $NETMASK"
+if [ -z "$IP4" ] || [ -z "$GW" ]; then
+    echo "ERROR: Could not detect IP or Gateway."
+    echo "Please check your internet connection."
+    exit 1
+fi
 
-echo "===================================================="
-echo "Creating Windows startup script..."
-echo "===================================================="
+echo "    IP: $IP4"
+echo "    GW: $GW"
+echo "    NM: $NETMASK"
+
+# --- 4. Create Windows Batch Script ---
+# Note: We escape % as %% for the batch file execution
+# Note: We force TLS12 for the download to work
+echo "[+] Creating Setup Script..."
 cat >/tmp/win_setup.bat<<EOF
 @ECHO OFF
-REM Elevate if needed
 cd.>%windir%\\GetAdmin
 if exist %windir%\\GetAdmin (del /f /q "%windir%\\GetAdmin") else (
   echo CreateObject^("Shell.Application"^).ShellExecute "%~s0", "%*", "", "runas", 1 >> "%temp%\\Admin.vbs"
@@ -62,7 +72,7 @@ if exist %windir%\\GetAdmin (del /f /q "%windir%\\GetAdmin") else (
   exit /b 2
 )
 
-REM --- 1. Static IP & DNS ---
+REM --- NETWORK CONFIG ---
 netsh interface ip set address name="Ethernet" source=static address=$IP4 mask=$NETMASK gateway=$GW
 netsh interface ip set dns name="Ethernet" static 8.8.8.8 primary
 netsh interface ip add dns name="Ethernet" 8.8.4.4 index=2
@@ -75,7 +85,7 @@ netsh interface ip set address name="Ethernet 2" source=static address=$IP4 mask
 netsh interface ip set dns name="Ethernet 2" static 8.8.8.8 primary 2>nul
 netsh interface ip add dns name="Ethernet 2" 8.8.4.4 index=2 2>nul
 
-REM --- 2. Extend Disk (attempt partition 2 then 1) ---
+REM --- DISK EXPANSION ---
 ECHO SELECT DISK 0 > C:\\diskpart.txt
 ECHO LIST PARTITION >> C:\\diskpart.txt
 ECHO SELECT PARTITION 2 >> C:\\diskpart.txt
@@ -86,102 +96,117 @@ ECHO EXIT >> C:\\diskpart.txt
 DISKPART /S C:\\diskpart.txt
 del /f /q C:\\diskpart.txt
 
-REM --- 3. Ensure RDP (default port 3389) firewall group enabled ---
+REM --- FIREWALL ---
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
 
-REM --- 4. Offline Chrome Install ---
-powershell -Command "Try { Invoke-WebRequest -Uri 'https://dl.google.com/tag/s/appguid%%3D%%7B8A69D345-D564-463C-AFF1-A69D9E530F96%%7D%%26iid%%3D%%7B104BF221-10C7-17CD-EB6C-119B16421526%%7D%%26lang%%3Den%%26browser%%3D4%%26usagestats%%3D1%%26appname%%3DGoogle%%20Chrome%%26needsadmin%%3Dprefers%%26ap%%3D-arch_x64-statsdef_1%%26installdataindex%%3Dempty/chrome/install/ChromeStandaloneSetup64.exe' -OutFile 'C:\\ChromeStandaloneSetup64.exe'; } Catch { Write-Host 'Chrome download failed'; Exit 1 }"
-start /wait C:\\ChromeStandaloneSetup64.exe /silent /install
-del /f /q C:\\ChromeStandaloneSetup64.exe
+REM --- CHROME INSTALL (FIXED TLS & URL) ---
+powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Try { Invoke-WebRequest -Uri 'https://dl.google.com/tag/s/appguid%%3D%%7B8A69D345-D564-463C-AFF1-A69D9E530F96%%7D%%26iid%%3D%%7BD8B6B20A-C037-C71E-AFA0-33475D286188%%7D%%26lang%%3Den-GB%%26browser%%3D3%%26usagestats%%3D0%%26appname%%3DGoogle%%2520Chrome%%26needsadmin%%3Dprefers%%26ap%%3Dx64-statsdef_1%%26installdataindex%%3Dempty/chrome/install/ChromeStandaloneSetup64.exe' -OutFile 'C:\\ChromeStandaloneSetup64.exe'; } Catch { Write-Host 'Download Failed'; Exit 1 }"
 
-REM --- 5. Notify & Cleanup ---
-msg * "SETUP COMPLETE. RDP available on port 3389. Chrome installed."
+if exist C:\\ChromeStandaloneSetup64.exe (
+    start /wait C:\\ChromeStandaloneSetup64.exe /silent /install
+    del /f /q C:\\ChromeStandaloneSetup64.exe
+)
+
+REM --- CLEANUP ---
 cd /d "%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
 del /f /q win_setup.bat
 exit
 EOF
 
-echo "✅ win_setup.bat created"
+# --- 5. Write Image to Disk ---
+echo "===================================================="
+echo "[+] Writing System to Disk (This takes time)..."
+echo "===================================================="
 
-echo "===================================================="
-echo "Writing image to /dev/vda ..."
-echo "===================================================="
+# Unmount anything just in case
+umount -f /dev/vda* 2>/dev/null
+
 if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
   wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
 else
   wget --no-check-certificate -O- "$PILIHOS" | dd of=/dev/vda bs=4M status=progress
 fi
 
-echo "Syncing & releasing locks..."
+echo ""
+echo "[+] Syncing disks..."
 sync
-sleep 2
-fuser -km /dev/vda* 2>/dev/null || true
-umount -l /dev/vda* 2>/dev/null || true
-umount -f /dev/vda* 2>/dev/null || true
-sleep 2
 
-echo "Refreshing partition table..."
-partprobe /dev/vda || true
-blockdev --rereadpt /dev/vda || true
-sleep 4
+# --- 6. Partition Refresh & Detection ---
+echo "[+] Refreshing Partition Table..."
+partprobe /dev/vda
+sleep 5
 
-echo "Listing partitions..."
-ls -la /dev/vda* || { echo "ERROR: No partitions found"; exit 1; }
+# Wait loop for partition
+MAX_RETRIES=10
+COUNT=0
+TARGET=""
 
-echo "Detecting Windows partition..."
-if [ -b /dev/vda2 ]; then
-  TARGET=/dev/vda2
-elif [ -b /dev/vda1 ]; then
-  TARGET=/dev/vda1
-else
-  echo "❌ No partition found"
-  lsblk
-  exit 1
+while [ $COUNT -lt $MAX_RETRIES ]; do
+    if [ -b /dev/vda2 ]; then
+        TARGET="/dev/vda2"
+        break
+    elif [ -b /dev/vda1 ]; then
+        TARGET="/dev/vda1"
+        break
+    fi
+    echo "    Waiting for partitions... ($COUNT)"
+    sleep 2
+    partprobe /dev/vda
+    COUNT=$((COUNT+1))
+done
+
+if [ -z "$TARGET" ]; then
+    echo "❌ ERROR: No Windows partition found after writing."
+    echo "The image might be corrupt or download failed."
+    exit 1
 fi
-echo "Using $TARGET"
 
-echo "Preparing partition..."
-fuser -km "$TARGET" 2>/dev/null || true
-umount -l "$TARGET" 2>/dev/null || true
-umount -f "$TARGET" 2>/dev/null || true
-sleep 2
-ntfsfix "$TARGET" || echo "ntfsfix warnings ignored"
+echo "[+] Target Partition Found: $TARGET"
 
-echo "Mounting NTFS..."
+# --- 7. Mounting & Injection ---
+echo "[+] Preparing Mount..."
+ntfsfix -d "$TARGET" 2>/dev/null # Clear dirty flag
+
 mkdir -p /mnt/windows
-mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || ntfs-3g "$TARGET" /mnt/windows -o force
+# Try force mounting RW
+mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
 
-echo "Injecting startup script..."
+if [ $? -ne 0 ]; then
+    echo "❌ ERROR: Could not mount Windows partition."
+    exit 1
+fi
+
+echo "[+] Injecting Startup Script..."
 DEST="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
+
+# Fallback if ProgramData doesn't exist (Rare but possible)
 if [ ! -d "$DEST" ]; then
-  ALT1="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
-  ALT2="/mnt/windows/ProgramData/Microsoft/Windows/Start\\ Menu/Programs/Startup"
-  if [ -d "$ALT1" ]; then DEST="$ALT1"
-  elif [ -d "$ALT2" ]; then DEST="$ALT2"
-  else mkdir -p "$DEST"; fi
+    mkdir -p "$DEST"
 fi
 
 cp -f /tmp/win_setup.bat "$DEST/win_setup.bat"
-[ -f "$DEST/win_setup.bat" ] && echo "Injection success ($(stat -c%s "$DEST/win_setup.bat") bytes)" || { echo "Injection failed"; exit 1; }
 
+if [ -f "$DEST/win_setup.bat" ]; then
+    echo "✅ INJECTION SUCCESSFUL!"
+else
+    echo "❌ ERROR: File copy failed. Partition might be Read-Only."
+    exit 1
+fi
+
+# --- 8. Finish ---
+echo "[+] Unmounting..."
 sync
-sleep 1
-umount /mnt/windows || umount -l /mnt/windows
+umount /mnt/windows
 
 echo "===================================================="
-echo "✅ Installation finished"
+echo "       INSTALLATION COMPLETE - REBOOTING            "
 echo "===================================================="
-echo "IP: $IP4  Gateway: $GW  Netmask: $NETMASK"
-echo "DNS: 8.8.8.8 / 8.8.4.4"
-echo "RDP will be on port 3389 (default)."
-echo "Next steps:"
-echo "  1. Let droplet power off."
-echo "  2. Disable recovery mode (boot from hard drive)."
-echo "  3. Start droplet, wait a few minutes."
-echo "  4. RDP to $IP4:3389 (Administrator / Botol123456789!)."
-echo "  5. Script runs, installs Chrome."
-for i in 10 9 8 7 6 5 4 3 2 1; do
-  echo "Powering off in $i..."
-  sleep 1
-done
+echo "1. Droplet will power off."
+echo "2. Go to DigitalOcean Control Panel."
+echo "3. Turn OFF Recovery Mode (Set to Hard Drive)."
+echo "4. Power ON the droplet."
+echo "5. Wait 3-5 mins, then RDP to $IP4"
+echo "===================================================="
+
+sleep 3
 poweroff
