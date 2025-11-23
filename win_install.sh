@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# DIGITALOCEAN WINDOWS INSTALLER - NETMASK & ADAPTER FIX
+# DIGITALOCEAN INSTALLER - SANITIZED NETWORK VERSION
 # Date: 2025-11-22
-# Fixes: 
-#   1. Auto-detects CIDR Prefix (Fixes 255.255.255.0 issue)
-#   2. Filters by "Red Hat VirtIO" driver (Fixes Ethernet 0 vs 2 issue)
+# Fixes:
+#   1. Strips the "/20" from the IP variable (Fixes "Invalid Parameter" error)
+#   2. Filters out 10.x.x.x Private IPs explicitly (Fixes "Command not recognized" error)
 #
 
-# --- COLOR LOGGING ---
+# --- LOGGING ---
 function log_info() { echo -e "\e[34m[INFO]\e[0m $1"; }
 function log_success() { echo -e "\e[32m[OK]\e[0m $1"; }
 function log_error() { echo -e "\e[31m[ERROR]\e[0m $1"; }
@@ -15,18 +15,17 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo "   WINDOWS INSTALLER - NETWORK PATCHED VERSION      "
+echo "   WINDOWS INSTALLER - SYNTAX FIX VERSION           "
 echo "===================================================="
 
 # --- 1. INSTALL DEPENDENCIES ---
 log_step "STEP 1: Installing Dependencies"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y ntfs-3g parted psmisc curl wget jq ipcalc || { log_error "Failed to install tools"; exit 1; }
-log_success "System tools installed."
+apt-get install -y ntfs-3g parted psmisc curl wget jq || { log_error "Failed to install tools"; exit 1; }
 
-# --- 2. DOWNLOAD CHROME (RAM) ---
-log_step "STEP 2: Pre-downloading Chrome (Enterprise MSI)"
+# --- 2. DOWNLOAD CHROME ---
+log_step "STEP 2: Pre-downloading Chrome"
 wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 [ -s "/tmp/chrome.msi" ] && log_success "Chrome downloaded." || { log_error "Chrome download failed."; exit 1; }
 
@@ -52,33 +51,37 @@ case "$PILIHOS" in
   *) log_error "Invalid selection"; exit 1;;
 esac
 
-# --- 4. PRECISE NETWORK DETECTION ---
-log_step "STEP 4: Auto-Detecting Network Details"
+# --- 4. SURGICAL NETWORK DETECTION ---
+log_step "STEP 4: Cleaning Network Variables"
 
-# Get the main interface name (usually eth0)
-IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+# 1. Get the full line containing the Public IP (Ignore 10.x and 127.x)
+# This specifically filters out the Private IP that was breaking your script.
+RAW_DATA=$(ip -4 -o addr show | awk '{print $4}' | grep -v "^10\." | grep -v "^127\." | head -n1)
 
-# Get IP and CIDR (e.g., 162.243.123.243/24)
-IP_CIDR=$(ip -4 -o addr show $IFACE | awk '{print $4}')
-IP4=${IP_CIDR%/*}
-PREFIX=${IP_CIDR#*/} # This extracts "24" from the user's "255.255.255.0"
+# 2. Strip the CIDR to get Pure IP (e.g., "157.245.13.197")
+CLEAN_IP=${RAW_DATA%/*}
+
+# 3. Extract the Prefix only (e.g., "20")
+CLEAN_PREFIX=${RAW_DATA#*/}
+
+# 4. Get Gateway
 GW=$(ip route | awk '/default/ { print $3 }' | head -n1)
 
 echo "   ---------------------------"
-echo "   Interface : $IFACE"
-echo "   IP Address: $IP4"
-echo "   Subnet / P: /$PREFIX  (Detected from Linux)"
+echo "   Raw Data  : $RAW_DATA"
+echo "   Clean IP  : $CLEAN_IP"
+echo "   Prefix    : $CLEAN_PREFIX"
 echo "   Gateway   : $GW"
 echo "   ---------------------------"
 
-if [ -z "$PREFIX" ] || [ "$PREFIX" == "$IP4" ]; then
-    PREFIX="24" # Fallback if detection fails
-    log_error "Warning: Prefix detection failed, defaulting to /24"
+# Safety check
+if [[ "$CLEAN_IP" == *"/"* ]] || [ -z "$CLEAN_IP" ]; then
+    log_error "IP Sanitization failed. Raw data was: $RAW_DATA"
+    exit 1
 fi
 
-# --- 5. GENERATE BATCH FILE (FIXED LOGIC) ---
+# --- 5. GENERATE BATCH FILE ---
 log_step "STEP 5: Generating Setup Script"
-log_info "Creating 'win_setup.bat'..."
 
 cat >/tmp/win_setup.bat<<EOF
 @ECHO OFF
@@ -91,12 +94,24 @@ if exist %windir%\\GetAdmin (del /f /q "%windir%\\GetAdmin") else (
   exit /b 2
 )
 
-REM --- 2. NETWORK FIX (TARGET: Red Hat VirtIO + Up) ---
-REM This command specifically targets the adapter with "Red Hat" in the description
-REM AND ensures it is "Up". It ignores the disabled "Ethernet 2".
-powershell -Command "\$TargetAdapter = Get-NetAdapter | Where-Object { \$_.InterfaceDescription -like '*Red Hat*' -and \$_.Status -eq 'Up' } | Select-Object -First 1; New-NetIPAddress -InterfaceAlias \$TargetAdapter.Name -IPAddress $IP4 -PrefixLength $PREFIX -DefaultGateway $GW -AddressFamily IPv4; Set-DnsClientServerAddress -InterfaceAlias \$TargetAdapter.Name -ServerAddresses ('8.8.8.8','1.1.1.1')"
+REM --- 2. DELAY FOR DRIVERS ---
+ECHO Waiting for network drivers...
+timeout /t 15 /nobreak >nul
 
-REM --- 3. DISK EXTEND ---
+REM --- 3. APPLY IP AND DNS (Retry Loop) ---
+FOR /L %%N IN (1,1,5) DO (
+  ECHO Attempt %%N...
+  
+  REM Notice: We use $CLEAN_IP and $CLEAN_PREFIX separately now. No slash in IP.
+  powershell -Command "Get-NetAdapter | Where-Object Status -eq 'Up' | New-NetIPAddress -IPAddress $CLEAN_IP -PrefixLength $CLEAN_PREFIX -DefaultGateway $GW -AddressFamily IPv4 -ErrorAction SilentlyContinue"
+  
+  REM Force DNS on all adapters
+  powershell -Command "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ('8.8.8.8','1.1.1.1') -ErrorAction SilentlyContinue"
+  
+  timeout /t 3 /nobreak >nul
+)
+
+REM --- 4. DISK EXTEND ---
 ECHO SELECT DISK 0 > C:\\diskpart.txt
 ECHO LIST PARTITION >> C:\\diskpart.txt
 ECHO SELECT PARTITION 2 >> C:\\diskpart.txt
@@ -107,16 +122,16 @@ ECHO EXIT >> C:\\diskpart.txt
 DISKPART /S C:\\diskpart.txt
 del /f /q C:\\diskpart.txt
 
-REM --- 4. FIREWALL ---
+REM --- 5. FIREWALL ---
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
 
-REM --- 5. INSTALL CHROME ---
+REM --- 6. INSTALL CHROME ---
 if exist "C:\\chrome.msi" (
     msiexec /i "C:\\chrome.msi" /quiet /norestart
     del /f /q "C:\\chrome.msi"
 )
 
-REM --- 6. SELF DESTRUCT ---
+REM --- 7. CLEANUP ---
 del /f /q "%~f0"
 exit
 EOF
@@ -153,11 +168,6 @@ ntfsfix -d "$TARGET" > /dev/null 2>&1
 mkdir -p /mnt/windows
 mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
 
-if ! mountpoint -q /mnt/windows; then
-    log_error "Failed to mount Windows partition."
-    exit 1
-fi
-
 # --- 8. INJECT FILES ---
 log_step "STEP 8: Injecting Setup Files"
 PATH_ALL_USERS="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
@@ -167,10 +177,6 @@ mkdir -p "$PATH_ALL_USERS" "$PATH_ADMIN"
 cp -v /tmp/chrome.msi /mnt/windows/chrome.msi
 cp -f /tmp/win_setup.bat "$PATH_ALL_USERS/win_setup.bat"
 cp -f /tmp/win_setup.bat "$PATH_ADMIN/win_setup.bat"
-
-# Verify
-[ -f "/mnt/windows/chrome.msi" ] && log_success "Chrome MSI injected."
-[ -f "$PATH_ALL_USERS/win_setup.bat" ] && log_success "Script injected."
 
 # --- 9. FINISH ---
 log_step "STEP 9: Cleaning Up"
@@ -183,7 +189,7 @@ echo "===================================================="
 echo " 1. Droplet is powering off."
 echo " 2. Go to DigitalOcean -> Turn OFF Recovery."
 echo " 3. Power ON."
-echo " 4. Connect RDP: $IP4"
+echo " 4. Connect RDP: $CLEAN_IP"
 echo "===================================================="
 sleep 5
 poweroff
