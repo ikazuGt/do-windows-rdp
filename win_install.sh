@@ -186,7 +186,7 @@ netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
 netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
 
 REM Double check with PowerShell (Force it)
-powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,1.1.1.1" >nul 2>&1
+powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
 
 ECHO [LOG] Flushing DNS Cache...
 ipconfig /flushdns
