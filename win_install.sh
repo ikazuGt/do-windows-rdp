@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# DIGITALOCEAN INSTALLER - FINAL DEBUG VERSION
-# Date: 2025-11-24
-# Fixes: Ethernet Instance 0 priority, DNS locking, Verbose Logging
+# DIGITALOCEAN INSTALLER - MULTI-PORT DNS FIX
+# Date: 2025-11-25
+# Fixes: DNS configuration for both Ethernet Instance 0 AND 2
 #
 
 # --- LOGGING FUNCTIONS ---
@@ -13,7 +13,7 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo "   WINDOWS INSTALLER - FINAL LOGGING VERSION        "
+echo "   WINDOWS INSTALLER - MULTI-PORT DNS VERSION       "
 echo "===================================================="
 
 # --- 1. INSTALL DEPENDENCIES ---
@@ -94,7 +94,7 @@ fi
 read -p "Look correct? [Y/n]: " CONFIRM
 if [[ "$CONFIRM" =~ ^[Nn] ]]; then exit 1; fi
 
-# --- 5. GENERATE BATCH FILE (THE FIX) ---
+# --- 5. GENERATE BATCH FILE (MULTI-PORT DNS FIX) ---
 log_step "STEP 5: Generating Windows Setup Script"
 
 cat > /tmp/win_setup.bat << 'EOFBATCH'
@@ -102,7 +102,7 @@ cat > /tmp/win_setup.bat << 'EOFBATCH'
 SETLOCAL EnableDelayedExpansion
 
 REM ============================================
-REM    WINDOWS SETUP - VERBOSE LOGGING
+REM    WINDOWS SETUP - MULTI-PORT DNS FIX
 REM ============================================
 
 SET IP=PLACEHOLDER_IP
@@ -134,7 +134,7 @@ ECHO.
 ECHO [LOG] Detecting Network Adapter...
 SET ADAPTER_NAME=
 
-REM CHECK 1: Look specifically for "Ethernet Instance 0" (The one that works)
+REM CHECK 1: Look specifically for "Ethernet Instance 0" (Most common)
 netsh interface show interface name="Ethernet Instance 0" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet Instance 0"
@@ -142,7 +142,15 @@ if %errorlevel% EQU 0 (
     goto :configure_network
 )
 
-REM CHECK 2: Look specifically for just "Ethernet"
+REM CHECK 2: Look specifically for "Ethernet Instance 2" (Rare cases)
+netsh interface show interface name="Ethernet Instance 2" >nul 2>&1
+if %errorlevel% EQU 0 (
+    SET "ADAPTER_NAME=Ethernet Instance 2"
+    ECHO [SUCCESS] Found Alternative Adapter: Ethernet Instance 2
+    goto :configure_network
+)
+
+REM CHECK 3: Look specifically for just "Ethernet"
 netsh interface show interface name="Ethernet" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet"
@@ -150,7 +158,7 @@ if %errorlevel% EQU 0 (
     goto :configure_network
 )
 
-REM CHECK 3: Fallback Loop (Take the FIRST connected one and STOP)
+REM CHECK 4: Fallback Loop (Take the FIRST connected one and STOP)
 ECHO [DEBUG] Specific names not found. Scanning list...
 for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connected"') do (
     SET "ADAPTER_NAME=%%b"
@@ -179,14 +187,50 @@ if %errorlevel% EQU 0 (
 
 timeout /t 2 /nobreak >nul
 
-REM --- APPLY DNS ---
+REM --- APPLY DNS (PRIMARY METHOD) ---
 ECHO.
-ECHO [LOG] Applying DNS Settings...
+ECHO [LOG] Applying DNS Settings to %ADAPTER_NAME%...
 netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
 netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
 
-REM Double check with PowerShell (Force it)
+REM Force DNS with PowerShell
 powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
+
+REM --- APPLY DNS TO ALTERNATE PORTS (FALLBACK) ---
+ECHO [LOG] Applying DNS to alternate Ethernet ports as fallback...
+
+REM Try Ethernet Instance 0
+netsh interface show interface name="Ethernet Instance 0" >nul 2>&1
+if %errorlevel% EQU 0 (
+    if NOT "%ADAPTER_NAME%"=="Ethernet Instance 0" (
+        ECHO [DEBUG] Configuring DNS for Ethernet Instance 0...
+        netsh interface ip set dns name="Ethernet Instance 0" source=static addr=8.8.8.8 >nul 2>&1
+        netsh interface ip add dns name="Ethernet Instance 0" addr=8.8.4.4 index=2 >nul 2>&1
+        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet Instance 0' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
+    )
+)
+
+REM Try Ethernet Instance 2
+netsh interface show interface name="Ethernet Instance 2" >nul 2>&1
+if %errorlevel% EQU 0 (
+    if NOT "%ADAPTER_NAME%"=="Ethernet Instance 2" (
+        ECHO [DEBUG] Configuring DNS for Ethernet Instance 2...
+        netsh interface ip set dns name="Ethernet Instance 2" source=static addr=8.8.8.8 >nul 2>&1
+        netsh interface ip add dns name="Ethernet Instance 2" addr=8.8.4.4 index=2 >nul 2>&1
+        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet Instance 2' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
+    )
+)
+
+REM Try standard Ethernet
+netsh interface show interface name="Ethernet" >nul 2>&1
+if %errorlevel% EQU 0 (
+    if NOT "%ADAPTER_NAME%"=="Ethernet" (
+        ECHO [DEBUG] Configuring DNS for Ethernet...
+        netsh interface ip set dns name="Ethernet" source=static addr=8.8.8.8 >nul 2>&1
+        netsh interface ip add dns name="Ethernet" addr=8.8.4.4 index=2 >nul 2>&1
+        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
+    )
+)
 
 ECHO [LOG] Flushing DNS Cache...
 ipconfig /flushdns
@@ -256,7 +300,7 @@ sed -i "s/PLACEHOLDER_IP/$CLEAN_IP/g" /tmp/win_setup.bat
 sed -i "s/PLACEHOLDER_MASK/$SUBNET_MASK/g" /tmp/win_setup.bat
 sed -i "s/PLACEHOLDER_GW/$GW/g" /tmp/win_setup.bat
 
-log_success "Batch script created with debug logs."
+log_success "Batch script created with multi-port DNS support."
 
 # --- 6. WRITE IMAGE ---
 log_step "STEP 6: Writing OS to Disk"
