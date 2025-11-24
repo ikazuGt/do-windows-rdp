@@ -1,12 +1,8 @@
 #!/bin/bash
 #
-# DIGITALOCEAN INSTALLER - NETWORK ADAPTER FIX
+# DIGITALOCEAN INSTALLER - BULLETPROOF NETWORK VERSION
 # Date: 2025-11-24
-# Fixes:
-#   1. Targets FIRST PHYSICAL adapter only (avoids "Ethernet 0 2" issue)
-#   2. Removes old IP config before applying new one
-#   3. Fixed DNS: 8.8.8.8 (primary), 8.8.4.4 (alternate)
-#   4. Uses -InterfaceIndex instead of pipeline to prevent multi-adapter errors
+# Features: 5-layer adapter detection, subnet validation, netsh fallback
 #
 
 # --- LOGGING ---
@@ -17,7 +13,7 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo "   WINDOWS INSTALLER - NETWORK ADAPTER FIX          "
+echo "   WINDOWS INSTALLER - BULLETPROOF VERSION          "
 echo "===================================================="
 
 # --- 1. INSTALL DEPENDENCIES ---
@@ -155,24 +151,24 @@ fi
 # --- 5. GENERATE BATCH FILE ---
 log_step "STEP 5: Generating Setup Script"
 
-cat >/tmp/win_setup.bat<<EOF
+cat > /tmp/win_setup.bat << 'EOFBATCH'
 @ECHO OFF
 REM ==================================================
 REM   WINDOWS NETWORK AUTO-CONFIGURATOR v3.0
 REM   Multi-Layer Fallback System
 REM ==================================================
 
-SET TARGET_IP=$CLEAN_IP
-SET TARGET_PREFIX=$CLEAN_PREFIX
-SET TARGET_MASK=$SUBNET_MASK
-SET TARGET_GW=$GW
+SET TARGET_IP=PLACEHOLDER_IP
+SET TARGET_PREFIX=PLACEHOLDER_PREFIX
+SET TARGET_MASK=PLACEHOLDER_MASK
+SET TARGET_GW=PLACEHOLDER_GW
 
 REM --- 1. GET ADMIN ---
-cd.>%windir%\\GetAdmin
-if exist %windir%\\GetAdmin (del /f /q "%windir%\\GetAdmin") else (
-  echo CreateObject^("Shell.Application"^).ShellExecute "%~s0", "%*", "", "runas", 1 >> "%temp%\\Admin.vbs"
-  "%temp%\\Admin.vbs"
-  del /f /q "%temp%\\Admin.vbs"
+cd.>%windir%\GetAdmin
+if exist %windir%\GetAdmin (del /f /q "%windir%\GetAdmin") else (
+  echo CreateObject^("Shell.Application"^).ShellExecute "%~s0", "%*", "", "runas", 1 >> "%temp%\Admin.vbs"
+  "%temp%\Admin.vbs"
+  del /f /q "%temp%\Admin.vbs"
   exit /b 2
 )
 
@@ -206,137 +202,50 @@ FOR /L %%N IN (1,1,5) DO (
   ECHO    ATTEMPT %%N: Network Configuration
   ECHO ========================================
   
-  REM === STRATEGY 1: Target by Name Pattern (Highest Priority) ===
-  ECHO [STRATEGY 1] Trying by name pattern (Ethernet 0 / Ethernet)...
-  powershell -Command "\$adapter = Get-NetAdapter | Where-Object {\$_.Name -match '^Ethernet( 0)?\
-
-REM --- 4. DISK EXTEND ---
-ECHO Extending disk partitions...
-ECHO SELECT DISK 0 > C:\\diskpart.txt
-ECHO LIST PARTITION >> C:\\diskpart.txt
-ECHO SELECT PARTITION 2 >> C:\\diskpart.txt
-ECHO EXTEND >> C:\\diskpart.txt
-ECHO SELECT PARTITION 1 >> C:\\diskpart.txt
-ECHO EXTEND >> C:\\diskpart.txt
-ECHO EXIT >> C:\\diskpart.txt
-DISKPART /S C:\\diskpart.txt
-del /f /q C:\\diskpart.txt
-
-REM --- 5. FIREWALL ---
-ECHO Enabling Remote Desktop...
-netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
-
-REM --- 6. INSTALL CHROME ---
-if exist "C:\\chrome.msi" (
-    ECHO Installing Chrome...
-    msiexec /i "C:\\chrome.msi" /quiet /norestart
-    del /f /q "C:\\chrome.msi"
-)
-
-REM --- 7. CLEANUP ---
-del /f /q "%~f0"
-exit
-EOF
-
-# --- 6. WRITE IMAGE ---
-log_step "STEP 6: Writing OS to Disk"
-umount -f /dev/vda* 2>/dev/null
-if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
-  wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
-else
-  wget --no-check-certificate -O- "$PILIHOS" | dd of=/dev/vda bs=4M status=progress
-fi
-sync
-sleep 3
-
-# --- 7. PARTITION & MOUNT ---
-log_step "STEP 7: Mounting Windows Partition"
-partprobe /dev/vda
-sleep 5
-
-TARGET=""
-for i in {1..10}; do
-    if [ -b /dev/vda2 ]; then TARGET="/dev/vda2"; break; fi
-    if [ -b /dev/vda1 ]; then TARGET="/dev/vda1"; break; fi
-    echo "   Waiting for partition... ($i/10)"
-    sleep 2
-    partprobe /dev/vda
-done
-[ -z "$TARGET" ] && { log_error "Partition not found."; exit 1; }
-
-log_info "Partition Found: $TARGET. Fixing NTFS..."
-ntfsfix -d "$TARGET" > /dev/null 2>&1
-
-mkdir -p /mnt/windows
-mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
-
-# --- 8. INJECT FILES ---
-log_step "STEP 8: Injecting Setup Files"
-PATH_ALL_USERS="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
-PATH_ADMIN="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
-mkdir -p "$PATH_ALL_USERS" "$PATH_ADMIN"
-
-cp -v /tmp/chrome.msi /mnt/windows/chrome.msi
-cp -f /tmp/win_setup.bat "$PATH_ALL_USERS/win_setup.bat"
-cp -f /tmp/win_setup.bat "$PATH_ADMIN/win_setup.bat"
-
-# --- 9. FINISH ---
-log_step "STEP 9: Cleaning Up"
-sync
-umount /mnt/windows
-
-echo "===================================================="
-echo "      INSTALLATION SUCCESSFUL!                      "
-echo "===================================================="
-echo " 1. Droplet is powering off."
-echo " 2. Go to DigitalOcean -> Turn OFF Recovery."
-echo " 3. Power ON."
-echo " 4. Connect RDP: $CLEAN_IP"
-echo "    Username: Administrator"
-echo "===================================================="
-sleep 5
-poweroff -and \$_.Status -eq 'Up'} | Select-Object -First 1; if (\$adapter) { Write-Host \"SUCCESS: Using \$(\$adapter.Name) [ifIndex: \$(\$adapter.ifIndex)]\"; Remove-NetIPAddress -InterfaceIndex \$adapter.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex \$adapter.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex \$adapter.ifIndex -IPAddress $CLEAN_IP -PrefixLength $CLEAN_PREFIX -DefaultGateway $GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex \$adapter.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue; exit 0 } else { Write-Host \"FAILED: No adapter matching pattern.\"; exit 1 }"
+  REM === STRATEGY 1: Target by Name Pattern ===
+  ECHO [STRATEGY 1] Trying by name pattern...
+  powershell -Command "$adapter = Get-NetAdapter | Where-Object {$_.Name -match '^Ethernet( 0)?$' -and $_.Status -eq 'Up'} | Select-Object -First 1; if ($adapter) { Write-Host 'SUCCESS: Using' $adapter.Name '[ifIndex:' $adapter.ifIndex ']'; Remove-NetIPAddress -InterfaceIndex $adapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex $adapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $env:TARGET_IP -PrefixLength $env:TARGET_PREFIX -DefaultGateway $env:TARGET_GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue; exit 0 } else { Write-Host 'FAILED: No adapter matching pattern.'; exit 1 }"
   
   if %ERRORLEVEL% EQU 0 (
     ECHO [SUCCESS] Strategy 1 worked!
     goto network_success
   )
   
-  REM === STRATEGY 2: Lowest ifIndex (Primary Adapter) ===
+  REM === STRATEGY 2: Lowest ifIndex ===
   ECHO [STRATEGY 2] Trying lowest ifIndex...
-  powershell -Command "\$adapter = Get-NetAdapter | Where-Object {\$_.Status -eq 'Up'} | Sort-Object -Property ifIndex | Select-Object -First 1; if (\$adapter) { Write-Host \"SUCCESS: Using \$(\$adapter.Name) [ifIndex: \$(\$adapter.ifIndex)]\"; Remove-NetIPAddress -InterfaceIndex \$adapter.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex \$adapter.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex \$adapter.ifIndex -IPAddress $CLEAN_IP -PrefixLength $CLEAN_PREFIX -DefaultGateway $GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex \$adapter.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue; exit 0 } else { Write-Host \"FAILED: No active adapters.\"; exit 1 }"
+  powershell -Command "$adapter = Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | Sort-Object -Property ifIndex | Select-Object -First 1; if ($adapter) { Write-Host 'SUCCESS: Using' $adapter.Name '[ifIndex:' $adapter.ifIndex ']'; Remove-NetIPAddress -InterfaceIndex $adapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex $adapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $env:TARGET_IP -PrefixLength $env:TARGET_PREFIX -DefaultGateway $env:TARGET_GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue; exit 0 } else { exit 1 }"
   
   if %ERRORLEVEL% EQU 0 (
     ECHO [SUCCESS] Strategy 2 worked!
     goto network_success
   )
   
-  REM === STRATEGY 3: Highest Link Speed (Best Adapter) ===
-  ECHO [STRATEGY 3] Trying adapter with highest link speed...
-  powershell -Command "\$adapter = Get-NetAdapter | Where-Object {\$_.Status -eq 'Up'} | Sort-Object -Property LinkSpeed -Descending | Select-Object -First 1; if (\$adapter) { Write-Host \"SUCCESS: Using \$(\$adapter.Name) [Speed: \$(\$adapter.LinkSpeed)]\"; Remove-NetIPAddress -InterfaceIndex \$adapter.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex \$adapter.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex \$adapter.ifIndex -IPAddress $CLEAN_IP -PrefixLength $CLEAN_PREFIX -DefaultGateway $GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex \$adapter.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue; exit 0 } else { exit 1 }"
+  REM === STRATEGY 3: Highest Link Speed ===
+  ECHO [STRATEGY 3] Trying highest link speed...
+  powershell -Command "$adapter = Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | Sort-Object -Property LinkSpeed -Descending | Select-Object -First 1; if ($adapter) { Write-Host 'SUCCESS: Using' $adapter.Name '[Speed:' $adapter.LinkSpeed ']'; Remove-NetIPAddress -InterfaceIndex $adapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex $adapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $env:TARGET_IP -PrefixLength $env:TARGET_PREFIX -DefaultGateway $env:TARGET_GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue; exit 0 } else { exit 1 }"
   
   if %ERRORLEVEL% EQU 0 (
     ECHO [SUCCESS] Strategy 3 worked!
     goto network_success
   )
   
-  REM === STRATEGY 4: Exclude Secondary Adapters by Name ===
-  ECHO [STRATEGY 4] Trying to exclude secondary adapters...
-  powershell -Command "\$adapter = Get-NetAdapter | Where-Object {\$_.Status -eq 'Up' -and \$_.Name -notmatch '0 2|#2|secondary'} | Select-Object -First 1; if (\$adapter) { Write-Host \"SUCCESS: Using \$(\$adapter.Name)\"; Remove-NetIPAddress -InterfaceIndex \$adapter.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex \$adapter.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex \$adapter.ifIndex -IPAddress $CLEAN_IP -PrefixLength $CLEAN_PREFIX -DefaultGateway $GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex \$adapter.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue; exit 0 } else { exit 1 }"
+  REM === STRATEGY 4: Exclude Secondary Adapters ===
+  ECHO [STRATEGY 4] Excluding secondary adapters...
+  powershell -Command "$adapter = Get-NetAdapter | Where-Object {$_.Status -eq 'Up' -and $_.Name -notmatch '0 2|#2|secondary'} | Select-Object -First 1; if ($adapter) { Write-Host 'SUCCESS: Using' $adapter.Name; Remove-NetIPAddress -InterfaceIndex $adapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex $adapter.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex $adapter.ifIndex -IPAddress $env:TARGET_IP -PrefixLength $env:TARGET_PREFIX -DefaultGateway $env:TARGET_GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue; exit 0 } else { exit 1 }"
   
   if %ERRORLEVEL% EQU 0 (
     ECHO [SUCCESS] Strategy 4 worked!
     goto network_success
   )
   
-  REM === STRATEGY 5: NUCLEAR OPTION - Configure ALL Adapters ===
-  ECHO [STRATEGY 5] NUCLEAR: Configuring ALL active adapters...
-  powershell -Command "Get-NetAdapter | Where-Object {\$_.Status -eq 'Up'} | ForEach-Object { Write-Host \"Configuring: \$(\$_.Name)\"; Remove-NetIPAddress -InterfaceIndex \$_.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex \$_.ifIndex -Confirm:\$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex \$_.ifIndex -IPAddress $CLEAN_IP -PrefixLength $CLEAN_PREFIX -DefaultGateway $GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex \$_.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue }"
+  REM === STRATEGY 5: NUCLEAR OPTION ===
+  ECHO [STRATEGY 5] NUCLEAR: Configuring ALL adapters...
+  powershell -Command "Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | ForEach-Object { Write-Host 'Configuring:' $_.Name; Remove-NetIPAddress -InterfaceIndex $_.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex $_.ifIndex -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex $_.ifIndex -IPAddress $env:TARGET_IP -PrefixLength $env:TARGET_PREFIX -DefaultGateway $env:TARGET_GW -AddressFamily IPv4 -ErrorAction SilentlyContinue; Set-DnsClientServerAddress -InterfaceIndex $_.ifIndex -ServerAddresses ('8.8.8.8','8.8.4.4') -ErrorAction SilentlyContinue }"
   
   ECHO [COMPLETE] Nuclear option executed.
   
   :network_success
-  ECHO [WAITING] 3 seconds before next attempt...
+  ECHO [WAITING] 3 seconds...
   timeout /t 3 /nobreak >nul
 )
 
@@ -345,43 +254,37 @@ ECHO.
 ECHO ========================================
 ECHO    VERIFYING NETWORK CONFIGURATION
 ECHO ========================================
-powershell -Command "Get-NetIPAddress -AddressFamily IPv4 | Where-Object {\$_.IPAddress -notmatch '^127\.|^169\.254\.'} | Format-Table -AutoSize"
-powershell -Command "Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object {\$_.ServerAddresses -ne \$null} | Format-Table -AutoSize"
+powershell -Command "Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.IPAddress -notmatch '^127\.|^169\.254\.'} | Format-Table -AutoSize"
+powershell -Command "Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object {$_.ServerAddresses -ne $null} | Format-Table -AutoSize"
 ECHO ========================================
 
-REM === PLAN Z: NETSH FALLBACK (If PowerShell completely failed) ===
+REM === PLAN Z: NETSH FALLBACK ===
 ECHO.
-ECHO Checking if configuration succeeded...
+ECHO Checking connectivity...
 ping -n 1 8.8.8.8 >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
   ECHO [WARNING] Network not responding. Trying NETSH fallback...
   
-  REM Get adapter name using netsh
   for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /i "connected"') do (
     set ADAPTER_NAME=%%b
     ECHO Trying adapter: %%b
     
-    REM Configure IP using variables
     netsh interface ip set address name="%%b" static %TARGET_IP% %TARGET_MASK% %TARGET_GW% 1
-    
-    REM Configure DNS
     netsh interface ip set dns name="%%b" static 8.8.8.8 primary
     netsh interface ip add dns name="%%b" 8.8.4.4 index=2
     
     timeout /t 2 /nobreak >nul
     
-    REM Test connectivity
     ping -n 1 8.8.8.8 >nul 2>&1
     if %ERRORLEVEL% EQU 0 (
-      ECHO [SUCCESS] NETSH fallback worked on adapter: %%b
+      ECHO [SUCCESS] NETSH fallback worked!
       goto netsh_success
     )
   )
   
   :netsh_success
-  ECHO NETSH configuration complete.
 ) else (
-  ECHO [SUCCESS] Network is responding. Configuration successful!
+  ECHO [SUCCESS] Network is responding!
 )
 
 REM --- FINAL CONNECTIVITY TEST ---
@@ -398,36 +301,42 @@ ECHO.
 ECHO Testing external connectivity...
 ping -n 2 google.com
 ECHO ========================================
-ECHO If all tests passed, network is configured correctly!
-ECHO ========================================
 
 REM --- 4. DISK EXTEND ---
 ECHO Extending disk partitions...
-ECHO SELECT DISK 0 > C:\\diskpart.txt
-ECHO LIST PARTITION >> C:\\diskpart.txt
-ECHO SELECT PARTITION 2 >> C:\\diskpart.txt
-ECHO EXTEND >> C:\\diskpart.txt
-ECHO SELECT PARTITION 1 >> C:\\diskpart.txt
-ECHO EXTEND >> C:\\diskpart.txt
-ECHO EXIT >> C:\\diskpart.txt
-DISKPART /S C:\\diskpart.txt
-del /f /q C:\\diskpart.txt
+ECHO SELECT DISK 0 > C:\diskpart.txt
+ECHO LIST PARTITION >> C:\diskpart.txt
+ECHO SELECT PARTITION 2 >> C:\diskpart.txt
+ECHO EXTEND >> C:\diskpart.txt
+ECHO SELECT PARTITION 1 >> C:\diskpart.txt
+ECHO EXTEND >> C:\diskpart.txt
+ECHO EXIT >> C:\diskpart.txt
+DISKPART /S C:\diskpart.txt
+del /f /q C:\diskpart.txt
 
 REM --- 5. FIREWALL ---
 ECHO Enabling Remote Desktop...
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
 
 REM --- 6. INSTALL CHROME ---
-if exist "C:\\chrome.msi" (
+if exist "C:\chrome.msi" (
     ECHO Installing Chrome...
-    msiexec /i "C:\\chrome.msi" /quiet /norestart
-    del /f /q "C:\\chrome.msi"
+    msiexec /i "C:\chrome.msi" /quiet /norestart
+    del /f /q "C:\chrome.msi"
 )
 
 REM --- 7. CLEANUP ---
 del /f /q "%~f0"
 exit
-EOF
+EOFBATCH
+
+# Replace placeholders with actual values
+sed -i "s/PLACEHOLDER_IP/$CLEAN_IP/g" /tmp/win_setup.bat
+sed -i "s/PLACEHOLDER_PREFIX/$CLEAN_PREFIX/g" /tmp/win_setup.bat
+sed -i "s/PLACEHOLDER_MASK/$SUBNET_MASK/g" /tmp/win_setup.bat
+sed -i "s/PLACEHOLDER_GW/$GW/g" /tmp/win_setup.bat
+
+log_success "Batch file generated with network config"
 
 # --- 6. WRITE IMAGE ---
 log_step "STEP 6: Writing OS to Disk"
