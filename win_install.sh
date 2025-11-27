@@ -40,7 +40,7 @@ echo "  8) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") PILIHOS="https://download1511.mediafire.com/afzpwow2ozdghj-V6T4pOf3h11A6TjpzYut_NUxcvsqLFgryNArZGhHtk_YwgXuQyFALIOQmAkjAvJfrjRkFJgCgLkJ0AUYO1nU6VEqBhYBSpP1Gs4cvnqFgPFZW4Mt_UV4zzxEQWyr-8dmikeOuQ8mcliJjYKUBT9TAhdaQQ0MP2f9i/5bnp3aoc7pi7jl9/windows2019DO.gz";;
+  1|"") PILIHOS="https://download1511.mediafire.com/dfibcx8d27sg10dad69S91EE0WHeAOlyhtI8Z63sQq6-4XeZwIEjKkMQN9fwW_5SflScHihzJvAuPrkYhGhEtuNkk011xRMbKmpU4woIAeYn_o6t9089zvmLxZQhQN81s3xBEdDoQAvrm2Pemfxj1CPht1REGaRrytTFONl7d8BdUrzF/5bnp3aoc7pi7jl9/windows2019DO.gz";;
   2) PILIHOS="https://download1078.mediafire.com/2ti1izymr4sgSszwIT4P7rbGKB-3hzCPsfT4jKXqI9sbP4PkKVPorB4iW64jaaqWxUYd1STLMH_gd844Dy2jfUxui04RnnCH-tGNyo0EYnoC1fyG972e1hg1j5qi6QqTKsy8HewiJiww4dzyJwLUmpP0Dha6AydjupNV8xzLg6fMIaNx/5shsxviym1a1yza/Windows_Server_2016_Datacenter_EVAL_en-us_14393_refresh.ISO.gz";;
   3) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
   4) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
