@@ -36,7 +36,8 @@ echo "  4) Windows 10 Super Lite MF"
 echo "  5) Windows 10 Super Lite CF"
 echo "  6) Windows 11 Normal"
 echo "  7) Windows 10 Normal"
-echo "  8) Custom Link"
+echo "  8) Windows 11 Tiny"
+echo "  9) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
@@ -47,7 +48,8 @@ case "$PILIHOS" in
   5) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
   6) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
   7) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
-  8) read -p "Enter Direct Link: " PILIHOS;;
+  8) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11_tiny.gz";;
+  9) read -p "Enter Direct Link: " PILIHOS;;
   *) log_error "Invalid selection"; exit 1;;
 esac
 
