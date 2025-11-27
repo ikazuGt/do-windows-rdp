@@ -1,9 +1,7 @@
 #!/bin/bash
 #
 # DIGITALOCEAN INSTALLER - UNIVERSAL WINDOWS COMPATIBILITY
-# Date: 2025-11-28
-# Supports: Windows Server 2016/2019/2022, Windows 10, Windows 11
-# Fixes: Multi-method approach with fallbacks for older Windows versions
+# FIXED VERSION (No Typos)
 #
 
 # --- LOGGING ---
@@ -14,7 +12,7 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo "   UNIVERSAL WINDOWS INSTALLER (2016-2022+Win11)   "
+echo "   UNIVERSAL WINDOWS INSTALLER (FIXED)             "
 echo "===================================================="
 
 # --- 1. INSTALL DEPENDENCIES ---
@@ -23,11 +21,11 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y ntfs-3g parted psmisc curl wget jq || { log_error "Failed to install tools"; exit 1; }
 
-# --- 2.  DOWNLOAD CHROME ---
+# --- 2. DOWNLOAD CHROME ---
 log_step "STEP 2: Pre-downloading Chrome"
 wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 
-# --- 3.  OS SELECTION ---
+# --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
 echo "  1) Windows Server 2019 (Recommended)"
 echo "  2) Windows Server 2016"
@@ -49,7 +47,7 @@ case "$PILIHOS" in
   6) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
   7) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
   8) PILIHOS="http://167.172.75.15/windows2022.gz";;
-  8) read -p "Enter Direct Link: " PILIHOS;;
+  9) read -p "Enter Direct Link: " PILIHOS;;
   *) log_error "Invalid selection"; exit 1;;
 esac
 
@@ -68,14 +66,11 @@ if [ -z "$GW" ] || [[ "$GW" == "0.0.0.0" ]]; then
 fi
 
 # --- SUBNET MASK CALCULATION FOR DIGITALOCEAN ---
-# DigitalOcean uses 255.255.X.0 format where X depends on prefix
 if [ "$CLEAN_PREFIX" -ge 16 ] && [ "$CLEAN_PREFIX" -le 24 ]; then
-    # Calculate the third octet: 256 - 2^(24 - prefix)
     THIRD_OCTET=$(( 256 - (1 << (24 - CLEAN_PREFIX)) ))
-    SUBNET_MASK="255. 255. ${THIRD_OCTET}. 0"
+    SUBNET_MASK="255.255.${THIRD_OCTET}.0"
 else
-    # Fallback for edge cases
-    SUBNET_MASK="255.255. 255.0"
+    SUBNET_MASK="255.255.255.0"
 fi
 
 # Display network configuration
@@ -90,7 +85,7 @@ read -p "Press ENTER to continue or CTRL+C to abort..."
 # --- 5. GENERATE BATCH FILE (UNIVERSAL COMPATIBILITY) ---
 log_step "STEP 5: Generating Universal System Script"
 
-cat > /tmp/setup. cmd << 'EOFBATCH'
+cat > /tmp/setup.cmd << 'EOFBATCH'
 @ECHO OFF
 SETLOCAL EnableDelayedExpansion
 SET IP=PLACEHOLDER_IP
@@ -103,16 +98,16 @@ ECHO [START] Script running as %USERNAME% at %DATE% %TIME% > C:\do_install.log
 ECHO [DEBUG] IP=%IP%, GW=%GW%, MASK=%MASK%, PREFIX=%PREFIX% >> C:\do_install.log
 
 REM --- 1. WAIT FOR DRIVERS ---
-ECHO [LOG] Waiting 15 seconds for drivers/services...  >> C:\do_install.log
+ECHO [LOG] Waiting 15 seconds for drivers/services... >> C:\do_install.log
 timeout /t 15 /nobreak >nul
 
 REM --- 2. DISABLE FIREWALL & NLA ---
-ECHO [LOG] Disabling Firewall and NLA...  >> C:\do_install.log
+ECHO [LOG] Disabling Firewall and NLA... >> C:\do_install.log
 
-REM Method 1: PowerShell (Windows 10/11/2016+)
+REM Method 1: PowerShell
 powershell -Command "Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False" >> C:\do_install.log 2>&1
 
-REM Method 2: NetSh fallback (older systems)
+REM Method 2: NetSh fallback
 netsh advfirewall set allprofiles state off >> C:\do_install.log 2>&1
 
 REM Disable Network Location Awareness prompt
@@ -121,59 +116,38 @@ reg add "HKLM\SYSTEM\CurrentControlSet\Control\Network\NewNetworkWindowOff" /f >
 REM --- 3. CONFIGURE NETWORK (MULTI-METHOD APPROACH) ---
 ECHO [LOG] Configuring Network (Universal Mode)... >> C:\do_install.log
 
-REM METHOD A: Modern PowerShell (Win10/11/2019+)
-ECHO [LOG] Trying PowerShell method...  >> C:\do_install.log
-powershell -Command "
-try {
-    $Adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
-    foreach ($Adapter in $Adapters) {
-        Write-Host 'Configuring adapter:' $Adapter. Name
-        Remove-NetIPAddress -InterfaceIndex $Adapter. InterfaceIndex -Confirm:$false -ErrorAction SilentlyContinue
-        Remove-NetRoute -InterfaceIndex $Adapter.InterfaceIndex -Confirm:$false -ErrorAction SilentlyContinue
-        New-NetIPAddress -InterfaceIndex $Adapter.InterfaceIndex -IPAddress %IP% -PrefixLength %PREFIX% -DefaultGateway %GW% -ErrorAction Stop
-        Set-DnsClientServerAddress -InterfaceIndex $Adapter.InterfaceIndex -ServerAddresses ('8.8.8.8', '8.8. 4.4') -ErrorAction Stop
-        Write-Host 'PowerShell method succeeded for' $Adapter.Name
-        exit 0
-    }
-} catch {
-    Write-Host 'PowerShell method failed:' $_.Exception. Message
-    exit 1
-}
-" >> C:\do_install.log 2>&1
+REM METHOD A: Modern PowerShell
+ECHO [LOG] Trying PowerShell method... >> C:\do_install.log
+powershell -Command "try { $Adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }; foreach ($Adapter in $Adapters) { Write-Host 'Configuring adapter:' $Adapter.Name; Remove-NetIPAddress -InterfaceIndex $Adapter.InterfaceIndex -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetRoute -InterfaceIndex $Adapter.InterfaceIndex -Confirm:$false -ErrorAction SilentlyContinue; New-NetIPAddress -InterfaceIndex $Adapter.InterfaceIndex -IPAddress %IP% -PrefixLength %PREFIX% -DefaultGateway %GW% -ErrorAction Stop; Set-DnsClientServerAddress -InterfaceIndex $Adapter.InterfaceIndex -ServerAddresses ('8.8.8.8', '8.8.4.4') -ErrorAction Stop; Write-Host 'PowerShell method succeeded for' $Adapter.Name; exit 0 } } catch { Write-Host 'PowerShell method failed:' $_.Exception.Message; exit 1 }" >> C:\do_install.log 2>&1
 
 IF %ERRORLEVEL% NEQ 0 (
     ECHO [LOG] PowerShell failed, trying NetSh method... >> C:\do_install.log
     
-    REM METHOD B: NetSh (Server 2016/Older Windows)
+    REM METHOD B: NetSh
     FOR /F "tokens=*" %%A IN ('netsh interface show interface ^| findstr /I "Connected Ethernet"') DO (
         FOR /F "tokens=3*" %%B IN ("%%A") DO (
             SET IFACE=%%C
-            ECHO [LOG] Found interface: ! IFACE! >> C:\do_install.log
-            
-            REM Set static IP
+            ECHO [LOG] Found interface: !IFACE! >> C:\do_install.log
             netsh interface ip set address name="!IFACE!" static %IP% %MASK% %GW% >> C:\do_install.log 2>&1
-            
-            REM Set DNS
             netsh interface ip set dns name="!IFACE!" static 8.8.8.8 primary >> C:\do_install.log 2>&1
-            netsh interface ip add dns name="! IFACE!" 8.8.4.4 index=2 >> C:\do_install.log 2>&1
-            
-            ECHO [LOG] NetSh configured: !IFACE!  >> C:\do_install.log
+            netsh interface ip add dns name="!IFACE!" 8.8.4.4 index=2 >> C:\do_install.log 2>&1
+            ECHO [LOG] NetSh configured: !IFACE! >> C:\do_install.log
         )
     )
     
-    REM METHOD C: WMIC fallback (very old systems)
-    ECHO [LOG] Trying WMIC method as final fallback... >> C:\do_install. log
+    REM METHOD C: WMIC fallback
+    ECHO [LOG] Trying WMIC method as final fallback... >> C:\do_install.log
     FOR /F "tokens=2 delims==" %%A IN ('wmic nic where "NetConnectionStatus=2" get NetConnectionID /value 2^>nul') DO (
         SET IFACE=%%A
         IF NOT "!IFACE!"=="" (
             netsh interface ip set address name="!IFACE!" static %IP% %MASK% %GW% >> C:\do_install.log 2>&1
-            netsh interface ip set dns name="! IFACE!" static 8.8.8.8 >> C:\do_install.log 2>&1
+            netsh interface ip set dns name="!IFACE!" static 8.8.8.8 >> C:\do_install.log 2>&1
         )
     )
 )
 
 REM --- 4. EXTEND DISK ---
-ECHO [LOG] Extending Disk...  >> C:\do_install.log
+ECHO [LOG] Extending Disk... >> C:\do_install.log
 (
 echo select disk 0
 echo list partition
@@ -187,63 +161,47 @@ del /f /q C:\diskpart.txt
 
 REM --- 5. ENABLE RDP ---
 ECHO [LOG] Enabling RDP... >> C:\do_install.log
-reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f >> C:\do_install. log 2>&1
+reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f >> C:\do_install.log 2>&1
 reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f >> C:\do_install.log 2>&1
 
-REM Enable RDP in firewall (both methods)
+REM Enable RDP in firewall
 powershell -Command "Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue" >> C:\do_install.log 2>&1
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >> C:\do_install.log 2>&1
 
-REM --- 6.  ENABLE ADMINISTRATOR ACCOUNT ---
+REM --- 6. ENABLE ADMINISTRATOR ACCOUNT ---
 ECHO [LOG] Enabling Administrator account... >> C:\do_install.log
 net user Administrator /active:yes >> C:\do_install.log 2>&1
 ECHO [LOG] Password remains as per Windows image default >> C:\do_install.log
 
-REM --- 7.  INSTALL CHROME ---
-if exist "C:\chrome. msi" (
+REM --- 7. INSTALL CHROME ---
+if exist "C:\chrome.msi" (
     ECHO [LOG] Installing Chrome... >> C:\do_install.log
     msiexec /i "C:\chrome.msi" /quiet /norestart >> C:\do_install.log 2>&1
 )
 
 REM --- 8. ADDITIONAL COMPATIBILITY FIXES ---
 ECHO [LOG] Applying compatibility fixes... >> C:\do_install.log
-
-REM Disable Windows Update (prevents restart during setup)
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /t REG_DWORD /d 1 /f >> C:\do_install.log 2>&1
-
-REM Disable Server Manager auto-start (Server versions)
 reg add "HKLM\SOFTWARE\Microsoft\ServerManager" /v DoNotOpenServerManagerAtLogon /t REG_DWORD /d 1 /f >> C:\do_install.log 2>&1
-
-REM Set power plan to High Performance
 powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c >> C:\do_install.log 2>&1
-
-REM Disable unnecessary services for faster boot
 sc config WSearch start= disabled >> C:\do_install.log 2>&1
-sc config SysMain start= disabled >> C:\do_install. log 2>&1
-
-REM Enable Auto-logon for first boot verification (optional)
-REM reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /t REG_SZ /d 1 /f
-REM reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v DefaultUserName /t REG_SZ /d Administrator /f
-REM reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v DefaultPassword /t REG_SZ /d Admin123!  /f
+sc config SysMain start= disabled >> C:\do_install.log 2>&1
 
 REM --- 9. VERIFY NETWORK ---
-ECHO [LOG] Network Verification...  >> C:\do_install.log
-ipconfig /all >> C:\do_install. log 2>&1
+ECHO [LOG] Network Verification... >> C:\do_install.log
+ipconfig /all >> C:\do_install.log 2>&1
 route print >> C:\do_install.log 2>&1
-ping -n 2 8.8.8. 8 >> C:\do_install.log 2>&1
+ping -n 2 8.8.8.8 >> C:\do_install.log 2>&1
 ping -n 2 google.com >> C:\do_install.log 2>&1
 
-REM --- 10.  SYSTEM INFO ---
-ECHO [LOG] System Information...  >> C:\do_install.log
+REM --- 10. SYSTEM INFO ---
+ECHO [LOG] System Information... >> C:\do_install.log
 systeminfo | findstr /B /C:"OS Name" /C:"OS Version" >> C:\do_install.log 2>&1
 wmic computersystem get model,manufacturer >> C:\do_install.log 2>&1
 
 ECHO ============================================ >> C:\do_install.log
 ECHO [DONE] Setup Complete at %DATE% %TIME% >> C:\do_install.log
 ECHO ============================================ >> C:\do_install.log
-ECHO [SECURITY] Please change your password after first login!  >> C:\do_install.log
-ECHO [INFO] Current credentials are from the Windows image defaults >> C:\do_install.log
-ECHO ============================================ >> C:\do_install. log
 EOFBATCH
 
 # Inject Variables
@@ -255,9 +213,13 @@ sed -i "s/PLACEHOLDER_PREFIX/$CLEAN_PREFIX/g" /tmp/setup.cmd
 # --- 6. WRITE IMAGE ---
 log_step "STEP 6: Writing OS to Disk"
 umount -f /dev/vda* 2>/dev/null
-if echo "$PILIHOS" | grep -qiE '\. gz($|\?)'; then
+
+# CHECK IF COMPRESSED AND DOWNLOAD ACCORDINGLY
+if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
+  log_info "Detected Compressed Image (.gz). Unzipping on the fly..."
   wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
 else
+  log_info "Detected Raw Image. Writing directly..."
   wget --no-check-certificate -O- "$PILIHOS" | dd of=/dev/vda bs=4M status=progress
 fi
 sync
@@ -272,19 +234,23 @@ TARGET=""
 for i in {1..10}; do
     if [ -b /dev/vda2 ]; then TARGET="/dev/vda2"; break; fi
     if [ -b /dev/vda1 ]; then TARGET="/dev/vda1"; break; fi
-    echo "   Searching for partition...  ($i/10)"
+    echo "   Searching for partition... ($i/10)"
     sleep 2
     partprobe /dev/vda
 done
-[ -z "$TARGET" ] && { log_error "Partition not found. "; exit 1; }
 
-log_info "Partition Found: $TARGET.  Fixing NTFS..."
+if [ -z "$TARGET" ]; then
+    log_error "Partition not found. The image write might have failed or the image is corrupt."
+    exit 1
+fi
+
+log_info "Partition Found: $TARGET. Fixing NTFS..."
 ntfsfix -d "$TARGET" > /dev/null 2>&1
 
 mkdir -p /mnt/windows
-mount. ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
+mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
 
-# --- 8.  INJECT FILES (SYSTEM SCRIPTS) ---
+# --- 8. INJECT FILES (SYSTEM SCRIPTS) ---
 log_step "STEP 8: Injecting System Scripts"
 
 PATH_SETUP="/mnt/windows/Windows/Setup/Scripts"
@@ -294,7 +260,7 @@ mkdir -p "$PATH_SETUP"
 cp -v /tmp/chrome.msi /mnt/windows/chrome.msi
 
 # INJECTION: SetupComplete.cmd (Universal Script)
-cp -f /tmp/setup. cmd "$PATH_SETUP/SetupComplete.cmd"
+cp -f /tmp/setup.cmd "$PATH_SETUP/SetupComplete.cmd"
 log_success "Injected Universal script into SetupComplete.cmd"
 
 # Create a secondary recovery script in Startup folder
@@ -309,14 +275,14 @@ IF NOT EXIST "C:\do_install.log" (
     ECHO [RECOVERY] Attempting manual configuration... >> C:\recovery.log
     
     REM Try to re-run the main setup
-    IF EXIST "C:\Windows\Setup\Scripts\SetupComplete. cmd" (
-        ECHO [RECOVERY] Running SetupComplete.cmd...  >> C:\recovery. log
+    IF EXIST "C:\Windows\Setup\Scripts\SetupComplete.cmd" (
+        ECHO [RECOVERY] Running SetupComplete.cmd... >> C:\recovery.log
         call "C:\Windows\Setup\Scripts\SetupComplete.cmd"
     ) ELSE (
         ECHO [RECOVERY] SetupComplete.cmd not found >> C:\recovery.log
     )
 ) ELSE (
-    ECHO [RECOVERY] Setup already completed successfully >> C:\recovery. log
+    ECHO [RECOVERY] Setup already completed successfully >> C:\recovery.log
 )
 
 REM Self-delete after successful run
@@ -339,9 +305,9 @@ TITLE Manual Network Configuration Helper
 ECHO ================================================
 ECHO   MANUAL NETWORK CONFIGURATION TOOL
 ECHO ================================================
-ECHO. 
-ECHO If automatic configuration failed, use this tool. 
-ECHO. 
+ECHO.
+ECHO If automatic configuration failed, use this tool.
+ECHO.
 ECHO Current Network Adapters:
 netsh interface show interface
 ECHO.
@@ -353,17 +319,17 @@ SET /P IP="Enter IP Address: "
 SET /P MASK="Enter Subnet Mask (e.g., 255.255.255.0): "
 SET /P GATEWAY="Enter Gateway: "
 
-ECHO. 
-ECHO Configuring %ADAPTER%... 
+ECHO.
+ECHO Configuring %ADAPTER%...
 netsh interface ip set address name="%ADAPTER%" static %IP% %MASK% %GATEWAY%
-netsh interface ip set dns name="%ADAPTER%" static 8. 8.8.8
+netsh interface ip set dns name="%ADAPTER%" static 8.8.8.8
 netsh interface ip add dns name="%ADAPTER%" 8.8.4.4 index=2
 
-ECHO. 
-ECHO Configuration complete!  Testing connection...
-ping -n 4 8.8. 8.8
+ECHO.
+ECHO Configuration complete! Testing connection...
+ping -n 4 8.8.8.8
 
-ECHO. 
+ECHO.
 ECHO Current IP Configuration:
 ipconfig /all
 
@@ -383,16 +349,13 @@ echo "       INSTALLATION COMPLETE (UNIVERSAL)            "
 echo "===================================================="
 echo " Supports: Windows Server 2016/2019/2022, Win10/11 "
 echo "===================================================="
-echo " 1.  Droplet is powering off NOW"
+echo " 1. Droplet is powering off NOW"
 echo " 2. Turn OFF Recovery Mode in DigitalOcean panel"
 echo " 3. Power ON the droplet"
 echo " 4. Wait 3-5 minutes for Windows to boot"
-echo " 5. Check C:\do_install. log via VNC for details"
+echo " 5. Check C:\do_install.log via VNC for details"
 echo " 6. Connect RDP to: $CLEAN_IP"
-echo " 7.  Use the default credentials from your Windows image"
-echo "===================================================="
-echo " IMPORTANT: Check your specific Windows image for"
-echo "            the default username and password!"
+echo " 7. Use the default credentials from your Windows image"
 echo "===================================================="
 sleep 5
 poweroff
