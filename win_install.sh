@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# DIGITALOCEAN INSTALLER - UNIVERSAL WINDOWS COMPATIBILITY
-# FIXED VERSION (No Typos)
+# DIGITALOCEAN WINDOWS INSTALLER - FINAL FIXED VERSION
+# Date: 2025-11-27
 #
 
 # --- LOGGING ---
@@ -12,7 +12,7 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo "   UNIVERSAL WINDOWS INSTALLER (FIXED)             "
+echo "   UNIVERSAL WINDOWS INSTALLER (FINAL FIX)         "
 echo "===================================================="
 
 # --- 1. INSTALL DEPENDENCIES ---
@@ -103,14 +103,8 @@ timeout /t 15 /nobreak >nul
 
 REM --- 2. DISABLE FIREWALL & NLA ---
 ECHO [LOG] Disabling Firewall and NLA... >> C:\do_install.log
-
-REM Method 1: PowerShell
 powershell -Command "Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False" >> C:\do_install.log 2>&1
-
-REM Method 2: NetSh fallback
 netsh advfirewall set allprofiles state off >> C:\do_install.log 2>&1
-
-REM Disable Network Location Awareness prompt
 reg add "HKLM\SYSTEM\CurrentControlSet\Control\Network\NewNetworkWindowOff" /f >> C:\do_install.log 2>&1
 
 REM --- 3. CONFIGURE NETWORK (MULTI-METHOD APPROACH) ---
@@ -134,16 +128,6 @@ IF %ERRORLEVEL% NEQ 0 (
             ECHO [LOG] NetSh configured: !IFACE! >> C:\do_install.log
         )
     )
-    
-    REM METHOD C: WMIC fallback
-    ECHO [LOG] Trying WMIC method as final fallback... >> C:\do_install.log
-    FOR /F "tokens=2 delims==" %%A IN ('wmic nic where "NetConnectionStatus=2" get NetConnectionID /value 2^>nul') DO (
-        SET IFACE=%%A
-        IF NOT "!IFACE!"=="" (
-            netsh interface ip set address name="!IFACE!" static %IP% %MASK% %GW% >> C:\do_install.log 2>&1
-            netsh interface ip set dns name="!IFACE!" static 8.8.8.8 >> C:\do_install.log 2>&1
-        )
-    )
 )
 
 REM --- 4. EXTEND DISK ---
@@ -153,8 +137,6 @@ echo select disk 0
 echo list partition
 echo select partition 2
 echo extend
-echo select partition 1
-echo extend
 ) > C:\diskpart.txt
 diskpart /s C:\diskpart.txt >> C:\do_install.log 2>&1
 del /f /q C:\diskpart.txt
@@ -163,15 +145,11 @@ REM --- 5. ENABLE RDP ---
 ECHO [LOG] Enabling RDP... >> C:\do_install.log
 reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f >> C:\do_install.log 2>&1
 reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f >> C:\do_install.log 2>&1
-
-REM Enable RDP in firewall
-powershell -Command "Enable-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue" >> C:\do_install.log 2>&1
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >> C:\do_install.log 2>&1
 
 REM --- 6. ENABLE ADMINISTRATOR ACCOUNT ---
 ECHO [LOG] Enabling Administrator account... >> C:\do_install.log
 net user Administrator /active:yes >> C:\do_install.log 2>&1
-ECHO [LOG] Password remains as per Windows image default >> C:\do_install.log
 
 REM --- 7. INSTALL CHROME ---
 if exist "C:\chrome.msi" (
@@ -184,20 +162,11 @@ ECHO [LOG] Applying compatibility fixes... >> C:\do_install.log
 reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /t REG_DWORD /d 1 /f >> C:\do_install.log 2>&1
 reg add "HKLM\SOFTWARE\Microsoft\ServerManager" /v DoNotOpenServerManagerAtLogon /t REG_DWORD /d 1 /f >> C:\do_install.log 2>&1
 powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c >> C:\do_install.log 2>&1
-sc config WSearch start= disabled >> C:\do_install.log 2>&1
-sc config SysMain start= disabled >> C:\do_install.log 2>&1
 
 REM --- 9. VERIFY NETWORK ---
 ECHO [LOG] Network Verification... >> C:\do_install.log
 ipconfig /all >> C:\do_install.log 2>&1
-route print >> C:\do_install.log 2>&1
 ping -n 2 8.8.8.8 >> C:\do_install.log 2>&1
-ping -n 2 google.com >> C:\do_install.log 2>&1
-
-REM --- 10. SYSTEM INFO ---
-ECHO [LOG] System Information... >> C:\do_install.log
-systeminfo | findstr /B /C:"OS Name" /C:"OS Version" >> C:\do_install.log 2>&1
-wmic computersystem get model,manufacturer >> C:\do_install.log 2>&1
 
 ECHO ============================================ >> C:\do_install.log
 ECHO [DONE] Setup Complete at %DATE% %TIME% >> C:\do_install.log
@@ -273,8 +242,6 @@ ECHO [RECOVERY] Recovery script started at %DATE% %TIME% > C:\recovery.log
 IF NOT EXIST "C:\do_install.log" (
     ECHO [RECOVERY] SetupComplete.cmd may not have run >> C:\recovery.log
     ECHO [RECOVERY] Attempting manual configuration... >> C:\recovery.log
-    
-    REM Try to re-run the main setup
     IF EXIST "C:\Windows\Setup\Scripts\SetupComplete.cmd" (
         ECHO [RECOVERY] Running SetupComplete.cmd... >> C:\recovery.log
         call "C:\Windows\Setup\Scripts\SetupComplete.cmd"
@@ -293,8 +260,8 @@ IF EXIST "C:\do_install.log" (
 )
 EOFRECOVERY
 
-# Inject recovery script into multiple startup locations for maximum compatibility
-mkdir -p /mnt/windows/ProgramData/Microsoft/Windows/Start\ Menu/Programs/StartUp
+# Inject recovery script into startup
+mkdir -p "/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp"
 cp -f /tmp/recovery.cmd "/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp/recovery.cmd" 2>/dev/null
 
 # Also create a manual configuration script on Desktop
