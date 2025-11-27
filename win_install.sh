@@ -1,11 +1,11 @@
 #!/bin/bash
 #
-# DIGITALOCEAN INSTALLER - MULTI-PORT DNS FIX
-# Date: 2025-11-25
-# Fixes: DNS configuration for both Ethernet Instance 0 AND 2
+# DIGITALOCEAN INSTALLER - ENTERPRISE FIX (SetupComplete.cmd)
+# Date: 2025-11-26
+# Fixes: Uses System Level Injection to bypass OOBE/Login requirements
 #
 
-# --- LOGGING FUNCTIONS ---
+# --- LOGGING ---
 function log_info() { echo -e "\e[34m[INFO]\e[0m $1"; }
 function log_success() { echo -e "\e[32m[OK]\e[0m $1"; }
 function log_error() { echo -e "\e[31m[ERROR]\e[0m $1"; }
@@ -13,7 +13,7 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo "   WINDOWS INSTALLER - MULTI-PORT DNS VERSION       "
+echo "   WINDOWS 10 ENTERPRISE INSTALLER (SYSTEM LEVEL)   "
 echo "===================================================="
 
 # --- 1. INSTALL DEPENDENCIES ---
@@ -25,19 +25,17 @@ apt-get install -y ntfs-3g parted psmisc curl wget jq || { log_error "Failed to 
 # --- 2. DOWNLOAD CHROME ---
 log_step "STEP 2: Pre-downloading Chrome"
 wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
-[ -s "/tmp/chrome.msi" ] && log_success "Chrome downloaded." || { log_error "Chrome download failed."; exit 1; }
 
 # --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
 echo "  1) Windows 2019 (Recommended)"
-echo "  2) Windows Server 2016 (For Low Spec)"
+echo "  2) Windows Server 2016"
 echo "  3) Windows 10 Super Lite SF"
 echo "  4) Windows 10 Super Lite MF"
 echo "  5) Windows 10 Super Lite CF"
 echo "  6) Windows 11 Normal"
-echo "  7) Windows 10 Normal"
-echo "  8) Windows 11 Tiny"
-echo "  9) Custom Link"
+echo "  7) Windows 10 Normal (Enterprise)"
+echo "  8) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
@@ -48,15 +46,13 @@ case "$PILIHOS" in
   5) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
   6) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
   7) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
-  8) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11_tiny.gz";;
-  9) read -p "Enter Direct Link: " PILIHOS;;
+  8) read -p "Enter Direct Link: " PILIHOS;;
   *) log_error "Invalid selection"; exit 1;;
 esac
 
 # --- 4. NETWORK DETECTION ---
 log_step "STEP 4: Calculating Network Settings"
 
-# Get the raw IP info (excluding local loopback and internal Docker/Private IPs)
 RAW_DATA=$(ip -4 -o addr show | awk '{print $4}' | grep -v "^10\." | grep -v "^127\." | head -n1)
 CLEAN_IP=${RAW_DATA%/*}
 CLEAN_PREFIX=${RAW_DATA#*/}
@@ -64,24 +60,16 @@ GW=$(ip route | awk '/default/ { print $3 }' | head -n1)
 
 # Gateway Failsafe
 if [ -z "$GW" ] || [[ "$GW" == "0.0.0.0" ]]; then
-    log_error "No gateway detected via route."
     IP_BASE=$(echo "$CLEAN_IP" | cut -d. -f1-3)
     GW="${IP_BASE}.1"
-    log_success "Calculated Gateway: $GW"
 fi
 
-# Netmask Calculation
 case "$CLEAN_PREFIX" in
     8) SUBNET_MASK="255.0.0.0";;
     16) SUBNET_MASK="255.255.0.0";;
     20) SUBNET_MASK="255.255.240.0";;
-    22) SUBNET_MASK="255.255.252.0";;
     24) SUBNET_MASK="255.255.255.0";;
-    25) SUBNET_MASK="255.255.255.128";;
-    26) SUBNET_MASK="255.255.255.192";;
-    27) SUBNET_MASK="255.255.255.224";;
-    28) SUBNET_MASK="255.255.255.240";;
-    *) SUBNET_MASK="255.255.255.0";; # Default fallback
+    *) SUBNET_MASK="255.255.255.0";;
 esac
 
 echo "   ---------------------------"
@@ -91,167 +79,56 @@ echo "   Gateway        : $GW"
 echo "   ---------------------------"
 
 if [[ "$CLEAN_IP" == *"/"* ]] || [ -z "$CLEAN_IP" ]; then
-    log_error "IP Detection Failed. Exiting to prevent bricking."
+    log_error "IP Detection Failed."
     exit 1
 fi
 
 read -p "Look correct? [Y/n]: " CONFIRM
 if [[ "$CONFIRM" =~ ^[Nn] ]]; then exit 1; fi
 
-# --- 5. GENERATE BATCH FILE (MULTI-PORT DNS FIX) ---
-log_step "STEP 5: Generating Windows Setup Script"
+# --- 5. GENERATE BATCH FILE ---
+log_step "STEP 5: Generating System Script"
 
-cat > /tmp/win_setup.bat << 'EOFBATCH'
+cat > /tmp/setup.cmd << 'EOFBATCH'
 @ECHO OFF
 SETLOCAL EnableDelayedExpansion
-
-REM ============================================
-REM    WINDOWS SETUP - MULTI-PORT DNS FIX
-REM ============================================
-
 SET IP=PLACEHOLDER_IP
 SET MASK=PLACEHOLDER_MASK
 SET GW=PLACEHOLDER_GW
 
-REM --- CHECK ADMIN RIGHTS ---
-net session >nul 2>&1
-if %errorLevel% NEQ 0 (
-    ECHO [LOG] Requesting Admin privileges...
-    powershell -Command "Start-Process '%~f0' -Verb RunAs"
-    exit /b
-)
+REM Create a log file in C:\ to verify execution
+ECHO [START] Script running as %USERNAME% > C:\do_install.log
 
-ECHO.
-ECHO ===========================================
-ECHO      STARTING NETWORK CONFIGURATION
-ECHO ===========================================
-ECHO [DEBUG] IP Target  : %IP%
-ECHO [DEBUG] Mask Target: %MASK%
-ECHO [DEBUG] Gateway    : %GW%
-ECHO.
+REM --- 1. DISABLE FIREWALL (CRITICAL FOR RDP) ---
+ECHO [LOG] Disabling Firewall... >> C:\do_install.log
+netsh advfirewall set allprofiles state off >> C:\do_install.log 2>&1
 
-ECHO [LOG] Waiting 15 seconds for drivers to load...
-timeout /t 15 /nobreak >nul
+REM --- 2. WAIT FOR DRIVERS ---
+ECHO [LOG] Waiting for drivers... >> C:\do_install.log
+timeout /t 10 /nobreak >nul
 
-REM --- ADAPTER SELECTION LOGIC ---
-ECHO.
-ECHO [LOG] Detecting Network Adapter...
-SET ADAPTER_NAME=
+REM --- 3. CONFIGURE NETWORK (PRIORITY ORDER) ---
+ECHO [LOG] Configuring Network... >> C:\do_install.log
 
-REM CHECK 1: Look specifically for "Ethernet Instance 0" (Most common)
-netsh interface show interface name="Ethernet Instance 0" >nul 2>&1
-if %errorlevel% EQU 0 (
-    SET "ADAPTER_NAME=Ethernet Instance 0"
-    ECHO [SUCCESS] Found Priority Adapter: Ethernet Instance 0
-    goto :configure_network
-)
+REM Try Priority 1: Ethernet Instance 0 (The good one)
+netsh interface ip set address name="Ethernet Instance 0" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1 >> C:\do_install.log 2>&1
+netsh interface ip set dns name="Ethernet Instance 0" source=static addr=8.8.8.8 >> C:\do_install.log 2>&1
+netsh interface ip add dns name="Ethernet Instance 0" addr=8.8.4.4 index=2 >> C:\do_install.log 2>&1
 
-REM CHECK 2: Look specifically for "Ethernet Instance 2" (Rare cases)
-netsh interface show interface name="Ethernet Instance 2" >nul 2>&1
-if %errorlevel% EQU 0 (
-    SET "ADAPTER_NAME=Ethernet Instance 2"
-    ECHO [SUCCESS] Found Alternative Adapter: Ethernet Instance 2
-    goto :configure_network
-)
+REM Try Priority 2: Ethernet (Standard)
+netsh interface ip set address name="Ethernet" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1 >> C:\do_install.log 2>&1
+netsh interface ip set dns name="Ethernet" source=static addr=8.8.8.8 >> C:\do_install.log 2>&1
 
-REM CHECK 3: Look specifically for just "Ethernet"
-netsh interface show interface name="Ethernet" >nul 2>&1
-if %errorlevel% EQU 0 (
-    SET "ADAPTER_NAME=Ethernet"
-    ECHO [SUCCESS] Found Standard Adapter: Ethernet
-    goto :configure_network
-)
+REM Try Priority 3: Ethernet Instance 2 (The backup)
+netsh interface ip set address name="Ethernet Instance 2" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1 >> C:\do_install.log 2>&1
+netsh interface ip set dns name="Ethernet Instance 2" source=static addr=8.8.8.8 >> C:\do_install.log 2>&1
 
-REM CHECK 4: Fallback Loop (Take the FIRST connected one and STOP)
-ECHO [DEBUG] Specific names not found. Scanning list...
-for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connected"') do (
-    SET "ADAPTER_NAME=%%b"
-    ECHO [DEBUG] Discovered Adapter: !ADAPTER_NAME!
-    goto :configure_network
-)
+REM --- 4. ENABLE RDP ---
+ECHO [LOG] Enabling RDP... >> C:\do_install.log
+reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f >> C:\do_install.log 2>&1
+netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >> C:\do_install.log 2>&1
 
-:configure_network
-if "%ADAPTER_NAME%"=="" (
-    ECHO [CRITICAL ERROR] No network adapter found!
-    goto :keep_open
-)
-
-ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%"
-
-REM --- APPLY IP ---
-ECHO.
-ECHO [LOG] Applying IP Address...
-netsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
-if %errorlevel% EQU 0 (
-    ECHO [SUCCESS] IP Applied.
-) else (
-    ECHO [ERROR] Failed to set IP. Retrying with PowerShell...
-    powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength 24 -DefaultGateway %GW%"
-)
-
-timeout /t 2 /nobreak >nul
-
-REM --- APPLY DNS (PRIMARY METHOD) ---
-ECHO.
-ECHO [LOG] Applying DNS Settings to %ADAPTER_NAME%...
-netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
-netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
-
-REM Force DNS with PowerShell
-powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
-
-REM --- APPLY DNS TO ALTERNATE PORTS (FALLBACK) ---
-ECHO [LOG] Applying DNS to alternate Ethernet ports as fallback...
-
-REM Try Ethernet Instance 0
-netsh interface show interface name="Ethernet Instance 0" >nul 2>&1
-if %errorlevel% EQU 0 (
-    if NOT "%ADAPTER_NAME%"=="Ethernet Instance 0" (
-        ECHO [DEBUG] Configuring DNS for Ethernet Instance 0...
-        netsh interface ip set dns name="Ethernet Instance 0" source=static addr=8.8.8.8 >nul 2>&1
-        netsh interface ip add dns name="Ethernet Instance 0" addr=8.8.4.4 index=2 >nul 2>&1
-        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet Instance 0' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
-    )
-)
-
-REM Try Ethernet Instance 2
-netsh interface show interface name="Ethernet Instance 2" >nul 2>&1
-if %errorlevel% EQU 0 (
-    if NOT "%ADAPTER_NAME%"=="Ethernet Instance 2" (
-        ECHO [DEBUG] Configuring DNS for Ethernet Instance 2...
-        netsh interface ip set dns name="Ethernet Instance 2" source=static addr=8.8.8.8 >nul 2>&1
-        netsh interface ip add dns name="Ethernet Instance 2" addr=8.8.4.4 index=2 >nul 2>&1
-        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet Instance 2' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
-    )
-)
-
-REM Try standard Ethernet
-netsh interface show interface name="Ethernet" >nul 2>&1
-if %errorlevel% EQU 0 (
-    if NOT "%ADAPTER_NAME%"=="Ethernet" (
-        ECHO [DEBUG] Configuring DNS for Ethernet...
-        netsh interface ip set dns name="Ethernet" source=static addr=8.8.8.8 >nul 2>&1
-        netsh interface ip add dns name="Ethernet" addr=8.8.4.4 index=2 >nul 2>&1
-        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
-    )
-)
-
-ECHO [LOG] Flushing DNS Cache...
-ipconfig /flushdns
-
-REM --- TEST NETWORK ---
-ECHO.
-ECHO [LOG] Testing Connection to Google...
-ping -n 2 8.8.8.8
-if %errorlevel% EQU 0 (
-    ECHO [SUCCESS] Internet Connected!
-) else (
-    ECHO [WARNING] Ping failed. RDP might still work if IP is set.
-)
-
-REM --- DISK EXTENSION ---
-ECHO.
-ECHO [LOG] Extending Disk Partitions...
+REM --- 5. EXTEND DISK ---
 (
 echo select disk 0
 echo list partition
@@ -260,51 +137,26 @@ echo extend
 echo select partition 1
 echo extend
 ) > C:\diskpart.txt
-diskpart /s C:\diskpart.txt >nul 2>&1
-del /f /q C:\diskpart.txt
-ECHO [SUCCESS] Disk Extended.
+diskpart /s C:\diskpart.txt >> C:\do_install.log 2>&1
 
-REM --- ENABLE RDP ---
-ECHO.
-ECHO [LOG] Enabling Remote Desktop (RDP)...
-reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f >nul
-netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >nul
-netsh advfirewall firewall add rule name="RDP_3389" dir=in action=allow protocol=TCP localport=3389 >nul
-ECHO [SUCCESS] RDP Enabled on Port 3389.
-
-REM --- INSTALL CHROME ---
-ECHO.
+REM --- 6. INSTALL CHROME ---
 if exist "C:\chrome.msi" (
-    ECHO [LOG] Installing Google Chrome...
-    start /wait msiexec /i "C:\chrome.msi" /quiet /norestart
-    del /f /q C:\chrome.msi
-    ECHO [SUCCESS] Chrome Installed.
-) else (
-    ECHO [INFO] Chrome installer not found, skipping.
+    ECHO [LOG] Installing Chrome... >> C:\do_install.log
+    msiexec /i "C:\chrome.msi" /quiet /norestart
 )
 
-ECHO.
-ECHO ===========================================
-ECHO      SETUP COMPLETE
-ECHO ===========================================
-ECHO IP Address: %IP%
-ECHO Username  : Administrator
-ECHO.
+REM --- 7. CREATE USER (IF NEEDED) ---
+REM Some Enterprise ISOs have disabled Admin accounts. We force one just in case.
+net user Administrator /active:yes >> C:\do_install.log 2>&1
+net user Administrator "Admin123!" >> C:\do_install.log 2>&1
 
-:keep_open
-ECHO [LOG] This window will stay open for debugging.
-ECHO Press any key to close and delete this script...
-pause >nul
-del /f /q "%~f0"
-exit
+ECHO [DONE] Setup Complete >> C:\do_install.log
 EOFBATCH
 
-# Inject Bash Variables into Batch File
-sed -i "s/PLACEHOLDER_IP/$CLEAN_IP/g" /tmp/win_setup.bat
-sed -i "s/PLACEHOLDER_MASK/$SUBNET_MASK/g" /tmp/win_setup.bat
-sed -i "s/PLACEHOLDER_GW/$GW/g" /tmp/win_setup.bat
-
-log_success "Batch script created with multi-port DNS support."
+# Inject Bash Variables
+sed -i "s/PLACEHOLDER_IP/$CLEAN_IP/g" /tmp/setup.cmd
+sed -i "s/PLACEHOLDER_MASK/$SUBNET_MASK/g" /tmp/setup.cmd
+sed -i "s/PLACEHOLDER_GW/$GW/g" /tmp/setup.cmd
 
 # --- 6. WRITE IMAGE ---
 log_step "STEP 6: Writing OS to Disk"
@@ -338,17 +190,31 @@ ntfsfix -d "$TARGET" > /dev/null 2>&1
 mkdir -p /mnt/windows
 mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
 
-# --- 8. INJECT FILES ---
-log_step "STEP 8: Injecting Setup Files"
-PATH_ALL_USERS="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
-PATH_ADMIN="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
-mkdir -p "$PATH_ALL_USERS" "$PATH_ADMIN"
+# --- 8. INJECT FILES (DUAL INJECTION) ---
+log_step "STEP 8: Injecting System Scripts"
 
+# Define Paths
+PATH_SETUP="/mnt/windows/Windows/Setup/Scripts"
+PATH_STARTUP="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
+PATH_ADMIN_STARTUP="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+
+# Create Directories
+mkdir -p "$PATH_SETUP"
+mkdir -p "$PATH_STARTUP"
+mkdir -p "$PATH_ADMIN_STARTUP"
+
+# Copy Chrome
 cp -v /tmp/chrome.msi /mnt/windows/chrome.msi
-cp -f /tmp/win_setup.bat "$PATH_ALL_USERS/win_setup.bat"
-cp -f /tmp/win_setup.bat "$PATH_ADMIN/win_setup.bat"
 
-log_success "Files injected"
+# INJECTION 1: SetupComplete.cmd (The Enterprise Fix)
+# This file is executed by Windows SYSTEM process before login.
+cp -f /tmp/setup.cmd "$PATH_SETUP/SetupComplete.cmd"
+log_success "Injected into Windows/Setup/Scripts/SetupComplete.cmd"
+
+# INJECTION 2: Normal Startup (Backup)
+cp -f /tmp/setup.cmd "$PATH_STARTUP/win_setup.bat"
+cp -f /tmp/setup.cmd "$PATH_ADMIN_STARTUP/win_setup.bat"
+log_success "Injected into Startup Folders"
 
 # --- 9. FINISH ---
 log_step "STEP 9: Cleaning Up"
@@ -359,10 +225,12 @@ echo "===================================================="
 echo "       INSTALLATION SUCCESSFUL!                     "
 echo "===================================================="
 echo " 1. Droplet is powering off NOW"
-echo " 2. Turn OFF Recovery Mode in DigitalOcean Panel"
+echo " 2. Turn OFF Recovery Mode"
 echo " 3. Power ON the droplet"
-echo " 4. Open Recovery Console (VNC) to see logs"
+echo " 4. IMPORTANT: Wait 3-5 minutes for OOBE to finish"
 echo " 5. Connect RDP to: $CLEAN_IP"
+echo "    Username: Administrator"
+echo "    Password: Admin123! (If reset by script)"
 echo "===================================================="
 sleep 5
 poweroff
