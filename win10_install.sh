@@ -315,37 +315,42 @@ fi
 sync
 sleep 5
 
-# --- 7. PARTITION DETECTION (IMPROVED) ---
+# --- 7. PARTITION DETECTION (SIMPLIFIED) ---
 log_step "STEP 7: Detecting Windows Partition"
 partprobe /dev/vda
 sleep 5
 
 TARGET=""
-for attempt in {1..15}; do
-  log_info "Scan attempt $attempt/15..."
+for attempt in {1..10}; do
+  log_info "Scan attempt $attempt/10..."
   
   # Try vda2 first (usually Windows C:)
   if [ -b /dev/vda2 ]; then
-    ntfsinfo /dev/vda2 2>/dev/null | grep -q "Volume Name" && TARGET="/dev/vda2" && break
+    TARGET="/dev/vda2"
+    log_success "Found partition: /dev/vda2"
+    break
   fi
   
   # Try vda1 as fallback
   if [ -b /dev/vda1 ]; then
-    ntfsinfo /dev/vda1 2>/dev/null | grep -q "Volume Name" && TARGET="/dev/vda1" && break
+    TARGET="/dev/vda1"
+    log_success "Found partition: /dev/vda1"
+    break
   fi
   
-  sleep 3
+  sleep 2
   partprobe /dev/vda
 done
 
 if [ -z "$TARGET" ]; then
-  log_error "Windows partition not found after 15 attempts!"
+  log_error "Windows partition not found after 10 attempts!"
   log_info "Available partitions:"
   lsblk /dev/vda
+  fdisk -l /dev/vda
   exit 1
 fi
 
-log_success "Found Windows partition: $TARGET"
+log_success "Using Windows partition: $TARGET"
 
 # --- 8. MOUNT WITH VERIFICATION ---
 log_step "STEP 8: Mounting Windows Partition"
@@ -409,9 +414,25 @@ for path in "${STARTUP_PATHS[@]}"; do
   fi
 done
 
-# CRITICAL: Also copy to root for manual execution
+# CRITICAL: Also copy to root and Desktop for manual execution
 cp -f /tmp/win_setup.bat /mnt/windows/win_setup.bat
 log_success "Backup copy at C:\\win_setup.bat"
+
+# Copy to Administrator Desktop
+DESKTOP_PATH="/mnt/windows/Users/Administrator/Desktop"
+mkdir -p "$DESKTOP_PATH"
+if cp -f /tmp/win_setup.bat "$DESKTOP_PATH/win_setup.bat" 2>/dev/null; then
+  log_success "Desktop backup at Administrator Desktop"
+else
+  log_error "Could not copy to Desktop (may not exist yet)"
+fi
+
+# Copy to Public Desktop (accessible to all users)
+PUBLIC_DESKTOP="/mnt/windows/Users/Public/Desktop"
+mkdir -p "$PUBLIC_DESKTOP"
+if cp -f /tmp/win_setup.bat "$PUBLIC_DESKTOP/win_setup.bat" 2>/dev/null; then
+  log_success "Desktop backup at Public Desktop"
+fi
 
 # Verify at least one copy succeeded
 if [ $SUCCESS_COUNT -eq 0 ]; then
