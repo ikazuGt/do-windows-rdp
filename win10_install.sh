@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# DIGITALOCEAN INSTALLER - WINDOWS 10 COMPATIBLE
-# Date: 2025-12-02
-# Fixes: RDP Configuration for Windows 10 Enterprise + Multi-Port DNS
+# DIGITALOCEAN INSTALLER - WINDOWS 10 COMPATIBLE (FIXED)
+# Date: 2025-12-03
+# Fixes: Startup execution + partition detection
 #
 
 # --- LOGGING FUNCTIONS ---
@@ -13,7 +13,7 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo " WINDOWS 10/11 INSTALLER - RDP FIXED VERSION "
+echo " WINDOWS 10/11 INSTALLER - FIXED EXECUTION VERSION "
 echo "===================================================="
 
 # --- 1. INSTALL DEPENDENCIES ---
@@ -96,7 +96,7 @@ if [[ "$CONFIRM" =~ ^[Nn] ]]; then
   exit 1
 fi
 
-# --- 5. GENERATE BATCH FILE (WINDOWS 10 COMPATIBLE) ---
+# --- 5. GENERATE BATCH FILE (FIXED FOR AUTO-EXECUTION) ---
 log_step "STEP 5: Generating Windows 10 Setup Script"
 
 cat > /tmp/win_setup.bat << 'EOFBATCH'
@@ -104,51 +104,55 @@ cat > /tmp/win_setup.bat << 'EOFBATCH'
 SETLOCAL EnableDelayedExpansion
 
 REM ============================================
-REM WINDOWS 10/11 SETUP - RDP FIXED VERSION
+REM WINDOWS 10/11 SETUP - AUTO-EXECUTION FIXED
 REM ============================================
 
 SET IP=PLACEHOLDER_IP
 SET MASK=PLACEHOLDER_MASK
 SET GW=PLACEHOLDER_GW
 
+REM --- CREATE LOG FILE ---
+SET LOGFILE=C:\setup_log.txt
+ECHO [%DATE% %TIME%] Script started >> %LOGFILE%
+
 REM --- CHECK ADMIN RIGHTS ---
 net session >nul 2>&1
 if %errorLevel% NEQ 0 (
-    ECHO [LOG] Requesting Admin privileges...
+    ECHO [LOG] Requesting Admin privileges... >> %LOGFILE%
     powershell -Command "Start-Process '%~f0' -Verb RunAs"
     exit /b
 )
 
-ECHO.
-ECHO ===========================================
-ECHO STARTING NETWORK CONFIGURATION
-ECHO ===========================================
-ECHO [DEBUG] IP Target  : %IP%
-ECHO [DEBUG] Mask Target: %MASK%
-ECHO [DEBUG] Gateway    : %GW%
-ECHO.
+ECHO. >> %LOGFILE%
+ECHO =========================================== >> %LOGFILE%
+ECHO STARTING NETWORK CONFIGURATION >> %LOGFILE%
+ECHO =========================================== >> %LOGFILE%
+ECHO [DEBUG] IP Target  : %IP% >> %LOGFILE%
+ECHO [DEBUG] Mask Target: %MASK% >> %LOGFILE%
+ECHO [DEBUG] Gateway    : %GW% >> %LOGFILE%
+ECHO. >> %LOGFILE%
 
-ECHO [LOG] Waiting 15 seconds for drivers to load...
-timeout /t 15 /nobreak >nul
+ECHO [LOG] Waiting 20 seconds for drivers to load... >> %LOGFILE%
+timeout /t 20 /nobreak >nul
 
 REM --- ADAPTER SELECTION LOGIC ---
-ECHO.
-ECHO [LOG] Detecting Network Adapter...
+ECHO. >> %LOGFILE%
+ECHO [LOG] Detecting Network Adapter... >> %LOGFILE%
 SET ADAPTER_NAME=
 
-REM CHECK 1: Ethernet Instance 0 (Most common on DigitalOcean)
+REM CHECK 1: Ethernet Instance 0
 netsh interface show interface name="Ethernet Instance 0" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet Instance 0"
-    ECHO [SUCCESS] Found Priority Adapter: Ethernet Instance 0
+    ECHO [SUCCESS] Found: Ethernet Instance 0 >> %LOGFILE%
     goto :configure_network
 )
 
-REM CHECK 2: Ethernet Instance 2 (Alternative)
+REM CHECK 2: Ethernet Instance 2
 netsh interface show interface name="Ethernet Instance 2" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet Instance 2"
-    ECHO [SUCCESS] Found Alternative Adapter: Ethernet Instance 2
+    ECHO [SUCCESS] Found: Ethernet Instance 2 >> %LOGFILE%
     goto :configure_network
 )
 
@@ -156,132 +160,101 @@ REM CHECK 3: Standard Ethernet
 netsh interface show interface name="Ethernet" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet"
-    ECHO [SUCCESS] Found Standard Adapter: Ethernet
+    ECHO [SUCCESS] Found: Ethernet >> %LOGFILE%
     goto :configure_network
 )
 
-REM CHECK 4: Fallback - First Connected Adapter
-ECHO [DEBUG] Specific names not found. Scanning list...
+REM CHECK 4: Red Hat VirtIO Ethernet Adapter (Common in VPS)
 for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connected"') do (
     SET "ADAPTER_NAME=%%b"
-    ECHO [DEBUG] Discovered Adapter: !ADAPTER_NAME!
+    ECHO [DEBUG] Auto-discovered: !ADAPTER_NAME! >> %LOGFILE%
     goto :configure_network
 )
 
 :configure_network
 if "%ADAPTER_NAME%"=="" (
-    ECHO [CRITICAL ERROR] No network adapter found!
+    ECHO [CRITICAL ERROR] No network adapter found! >> %LOGFILE%
     goto :enable_rdp
 )
 
-ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%"
+ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%" >> %LOGFILE%
 
 REM --- APPLY IP ADDRESS ---
-ECHO.
-ECHO [LOG] Applying IP Address...
-netsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
+ECHO. >> %LOGFILE%
+ECHO [LOG] Applying IP Address... >> %LOGFILE%
+netsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1 >> %LOGFILE% 2>&1
 if %errorlevel% EQU 0 (
-    ECHO [SUCCESS] IP Applied.
+    ECHO [SUCCESS] IP Applied via netsh >> %LOGFILE%
 ) else (
-    ECHO [ERROR] Failed to set IP. Retrying with PowerShell...
-    powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength 24 -DefaultGateway %GW%" >nul 2>&1
+    ECHO [ERROR] netsh failed. Trying PowerShell... >> %LOGFILE%
+    powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength 24 -DefaultGateway %GW% -ErrorAction SilentlyContinue" >> %LOGFILE% 2>&1
 )
-timeout /t 2 /nobreak >nul
+timeout /t 3 /nobreak >nul
 
-REM --- APPLY DNS (MULTI-PORT) ---
-ECHO.
-ECHO [LOG] Applying DNS Settings to %ADAPTER_NAME%...
-netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
-netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
-powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
+REM --- APPLY DNS ---
+ECHO. >> %LOGFILE%
+ECHO [LOG] Applying DNS Settings... >> %LOGFILE%
+netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8 >> %LOGFILE% 2>&1
+netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2 >> %LOGFILE% 2>&1
+powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,8.8.4.4 -ErrorAction SilentlyContinue" >> %LOGFILE% 2>&1
 
-REM Apply DNS to all possible Ethernet ports as fallback
-ECHO [LOG] Applying DNS to alternate Ethernet ports...
+REM Apply to all Ethernet ports
 for %%A in ("Ethernet Instance 0" "Ethernet Instance 2" "Ethernet") do (
     netsh interface show interface name=%%A >nul 2>&1
     if !errorlevel! EQU 0 (
         if NOT "%ADAPTER_NAME%"==%%A (
-            ECHO [DEBUG] Configuring DNS for %%A...
             netsh interface ip set dns name=%%A source=static addr=8.8.8.8 >nul 2>&1
             netsh interface ip add dns name=%%A addr=8.8.4.4 index=2 >nul 2>&1
-            powershell -Command "Set-DnsClientServerAddress -InterfaceAlias %%A -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
         )
     )
 )
 
-ECHO [LOG] Flushing DNS Cache...
+ECHO [LOG] Flushing DNS Cache... >> %LOGFILE%
 ipconfig /flushdns >nul
 
 REM --- TEST NETWORK ---
-ECHO.
-ECHO [LOG] Testing Connection to Google...
-ping -n 2 8.8.8.8 >nul
+ECHO. >> %LOGFILE%
+ECHO [LOG] Testing Connection... >> %LOGFILE%
+ping -n 2 8.8.8.8 >> %LOGFILE% 2>&1
 if %errorlevel% EQU 0 (
-    ECHO [SUCCESS] Internet Connected!
+    ECHO [SUCCESS] Internet Connected! >> %LOGFILE%
 ) else (
-    ECHO [WARNING] Ping failed. RDP might still work if IP is set.
+    ECHO [WARNING] Ping failed. Continuing anyway... >> %LOGFILE%
 )
 
 :enable_rdp
-REM --- DISABLE POWER SAVING (CRITICAL FOR WINDOWS 10) ---
-ECHO.
-ECHO [LOG] Disabling Sleep and Hibernation...
-powercfg -change -standby-timeout-ac 0
-powercfg -change -standby-timeout-dc 0
-powercfg -change -hibernate-timeout-ac 0
-powercfg -change -hibernate-timeout-dc 0
+REM --- DISABLE POWER SAVING ---
+ECHO. >> %LOGFILE%
+ECHO [LOG] Disabling Sleep/Hibernation... >> %LOGFILE%
+powercfg -change -standby-timeout-ac 0 >> %LOGFILE% 2>&1
+powercfg -change -standby-timeout-dc 0 >> %LOGFILE% 2>&1
+powercfg -change -hibernate-timeout-ac 0 >> %LOGFILE% 2>&1
+powercfg -change -hibernate-timeout-dc 0 >> %LOGFILE% 2>&1
 powercfg -h off >nul 2>&1
-ECHO [SUCCESS] Power saving disabled.
+ECHO [SUCCESS] Power settings configured >> %LOGFILE%
 
-REM --- ENABLE REMOTE DESKTOP (WINDOWS 10 METHOD) ---
-ECHO.
-ECHO [LOG] Enabling Remote Desktop for Windows 10...
+REM --- ENABLE REMOTE DESKTOP ---
+ECHO. >> %LOGFILE%
+ECHO [LOG] Enabling Remote Desktop... >> %LOGFILE%
 
-REM 1. Enable Remote Desktop (Allow remote connections)
-reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f >nul
-ECHO [OK] Remote connections enabled
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f >> %LOGFILE% 2>&1
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 1 /f >> %LOGFILE% 2>&1
+netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >> %LOGFILE% 2>&1
+netsh advfirewall firewall add rule name="RDP_TCP_3389" dir=in action=allow protocol=TCP localport=3389 >> %LOGFILE% 2>&1
+netsh advfirewall firewall add rule name="RDP_UDP_3389" dir=in action=allow protocol=UDP localport=3389 >> %LOGFILE% 2>&1
+sc config TermService start= auto >> %LOGFILE% 2>&1
+net start TermService >> %LOGFILE% 2>&1
+sc config UmRdpService start= auto >> %LOGFILE% 2>&1
+net start UmRdpService >> %LOGFILE% 2>&1
+net localgroup "Remote Desktop Users" Administrator /add >> %LOGFILE% 2>&1
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v PortNumber /t REG_DWORD /d 3389 /f >> %LOGFILE% 2>&1
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f >> %LOGFILE% 2>&1
 
-REM 2. Enable Network Level Authentication (NLA) - The checkbox in your screenshot
-reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 1 /f >nul
-ECHO [OK] Network Level Authentication enabled
-
-REM 3. Allow RDP through Windows Firewall (Multiple rules for compatibility)
-netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >nul 2>&1
-netsh advfirewall firewall add rule name="RDP_TCP_3389" dir=in action=allow protocol=TCP localport=3389 >nul 2>&1
-netsh advfirewall firewall add rule name="RDP_UDP_3389" dir=in action=allow protocol=UDP localport=3389 >nul 2>&1
-ECHO [OK] Firewall rules configured
-
-REM 4. Enable Terminal Services (Critical for Windows 10)
-sc config TermService start= auto >nul
-net start TermService >nul 2>&1
-ECHO [OK] Terminal Services started
-
-REM 5. Enable Remote Desktop Services (RDS)
-sc config UmRdpService start= auto >nul
-net start UmRdpService >nul 2>&1
-ECHO [OK] Remote Desktop Services enabled
-
-REM 6. Add Administrator to Remote Desktop Users group
-net localgroup "Remote Desktop Users" Administrator /add >nul 2>&1
-ECHO [OK] Administrator added to RDP users
-
-REM 7. Disable "Require User Authentication" for initial connection (optional - makes first login easier)
-REM Uncomment the line below if you want to disable NLA for troubleshooting
-REM reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f >nul
-
-REM 8. Set RDP Port (ensure it's 3389)
-reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v PortNumber /t REG_DWORD /d 3389 /f >nul
-ECHO [OK] RDP port set to 3389
-
-REM 9. Disable credential requirement (Windows 10 specific)
-reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f >nul 2>&1
-ECHO [OK] Credential policies configured
-
-ECHO [SUCCESS] Remote Desktop fully enabled!
+ECHO [SUCCESS] RDP Enabled >> %LOGFILE%
 
 REM --- DISK EXTENSION ---
-ECHO.
-ECHO [LOG] Extending Disk Partitions...
+ECHO. >> %LOGFILE%
+ECHO [LOG] Extending Disk... >> %LOGFILE%
 (
     echo select disk 0
     echo list partition
@@ -290,56 +263,48 @@ ECHO [LOG] Extending Disk Partitions...
     echo select partition 1
     echo extend
 ) > C:\diskpart.txt
-diskpart /s C:\diskpart.txt >nul 2>&1
+diskpart /s C:\diskpart.txt >> %LOGFILE% 2>&1
 del /f /q C:\diskpart.txt >nul 2>&1
-ECHO [SUCCESS] Disk extended.
+ECHO [SUCCESS] Disk extended >> %LOGFILE%
 
 REM --- INSTALL CHROME ---
-ECHO.
+ECHO. >> %LOGFILE%
 if exist "C:\chrome.msi" (
-    ECHO [LOG] Installing Google Chrome...
-    start /wait msiexec /i "C:\chrome.msi" /quiet /norestart
+    ECHO [LOG] Installing Chrome... >> %LOGFILE%
+    start /wait msiexec /i "C:\chrome.msi" /quiet /norestart >> %LOGFILE% 2>&1
     del /f /q C:\chrome.msi >nul 2>&1
-    ECHO [SUCCESS] Chrome installed.
-) else (
-    ECHO [INFO] Chrome installer not found, skipping.
+    ECHO [SUCCESS] Chrome installed >> %LOGFILE%
 )
 
-REM --- KEEP EXISTING PASSWORD FROM ISO ---
-ECHO [LOG] Using built-in ISO password (not changing)
+REM --- FINAL STATUS ---
+ECHO. >> %LOGFILE%
+ECHO =========================================== >> %LOGFILE%
+ECHO SETUP COMPLETE >> %LOGFILE%
+ECHO =========================================== >> %LOGFILE%
+ECHO IP: %IP% >> %LOGFILE%
+ECHO User: Administrator >> %LOGFILE%
+ECHO Pass: P@ssword64 >> %LOGFILE%
+ECHO RDP: 3389 (NLA Enabled) >> %LOGFILE%
+ECHO =========================================== >> %LOGFILE%
+ECHO [%DATE% %TIME%] Script completed >> %LOGFILE%
 
-ECHO.
-ECHO ===========================================
-ECHO SETUP COMPLETE
-ECHO ===========================================
-ECHO IP Address  : %IP%
-ECHO Username    : Administrator
-ECHO Password    : P@ssword64 (from ISO)
-ECHO RDP Port    : 3389
-ECHO NLA Enabled : YES (as shown in your screenshot)
-ECHO.
-ECHO Connect with: mstsc /v:%IP%
-ECHO ===========================================
-ECHO.
-
-:keep_open
-ECHO [LOG] This window will stay open for debugging.
-ECHO Press any key to close and delete this script...
-pause >nul
-del /f /q "%~f0"
+REM --- SELF-DELETE AFTER 30 SECONDS ---
+timeout /t 30 /nobreak >nul
+del /f /q "%~f0" >nul 2>&1
 exit
 EOFBATCH
 
-# Inject Bash Variables into Batch File
+# Inject Variables
 sed -i "s/PLACEHOLDER_IP/$CLEAN_IP/g" /tmp/win_setup.bat
 sed -i "s/PLACEHOLDER_MASK/$SUBNET_MASK/g" /tmp/win_setup.bat
 sed -i "s/PLACEHOLDER_GW/$GW/g" /tmp/win_setup.bat
 
-log_success "Windows 10 compatible batch script created."
+log_success "Batch script generated with logging."
 
 # --- 6. WRITE IMAGE ---
-log_step "STEP 6: Writing OS to Disk"
+log_step "STEP 6: Writing OS to Disk (this takes 5-15 minutes)"
 umount -f /dev/vda* 2>/dev/null
+killall -9 dd 2>/dev/null
 
 if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
   wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
@@ -348,66 +313,180 @@ else
 fi
 
 sync
-sleep 3
+sleep 5
 
-# --- 7. PARTITION & MOUNT ---
-log_step "STEP 7: Mounting Windows Partition"
+# --- 7. PARTITION DETECTION (IMPROVED) ---
+log_step "STEP 7: Detecting Windows Partition"
 partprobe /dev/vda
 sleep 5
 
 TARGET=""
-for i in {1..10}; do
-  if [ -b /dev/vda2 ]; then TARGET="/dev/vda2"; break; fi
-  if [ -b /dev/vda1 ]; then TARGET="/dev/vda1"; break; fi
-  echo " Searching for partition... ($i/10)"
-  sleep 2
+for attempt in {1..15}; do
+  log_info "Scan attempt $attempt/15..."
+  
+  # Try vda2 first (usually Windows C:)
+  if [ -b /dev/vda2 ]; then
+    ntfsinfo /dev/vda2 2>/dev/null | grep -q "Volume Name" && TARGET="/dev/vda2" && break
+  fi
+  
+  # Try vda1 as fallback
+  if [ -b /dev/vda1 ]; then
+    ntfsinfo /dev/vda1 2>/dev/null | grep -q "Volume Name" && TARGET="/dev/vda1" && break
+  fi
+  
+  sleep 3
   partprobe /dev/vda
 done
 
-[ -z "$TARGET" ] && { log_error "Partition not found."; exit 1; }
+if [ -z "$TARGET" ]; then
+  log_error "Windows partition not found after 15 attempts!"
+  log_info "Available partitions:"
+  lsblk /dev/vda
+  exit 1
+fi
 
-log_info "Partition Found: $TARGET. Fixing NTFS..."
-ntfsfix -d "$TARGET" > /dev/null 2>&1
+log_success "Found Windows partition: $TARGET"
+
+# --- 8. MOUNT WITH VERIFICATION ---
+log_step "STEP 8: Mounting Windows Partition"
+
+log_info "Repairing NTFS filesystem..."
+ntfsfix -d "$TARGET" 2>&1 | tee /tmp/ntfsfix.log
 
 mkdir -p /mnt/windows
-mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || \
-mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
 
-# --- 8. INJECT FILES ---
-log_step "STEP 8: Injecting Setup Files"
+log_info "Attempting mount..."
+if mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows; then
+  log_success "Mount successful (remove_hiberfile)"
+elif mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows; then
+  log_success "Mount successful (force)"
+else
+  log_error "Mount failed! Checking filesystem..."
+  ntfsinfo "$TARGET" | head -20
+  exit 1
+fi
 
-PATH_ALL_USERS="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
-PATH_ADMIN="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+# Verify mount
+if [ ! -d "/mnt/windows/Windows" ]; then
+  log_error "Mount succeeded but Windows directory not found!"
+  log_info "Mounted contents:"
+  ls -la /mnt/windows/
+  exit 1
+fi
 
-mkdir -p "$PATH_ALL_USERS" "$PATH_ADMIN"
+log_success "Windows directory verified at /mnt/windows/Windows"
 
+# --- 9. INJECT FILES WITH VERIFICATION ---
+log_step "STEP 9: Injecting Setup Files (MULTIPLE LOCATIONS)"
+
+# Define all possible startup locations
+declare -a STARTUP_PATHS=(
+  "/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
+  "/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+  "/mnt/windows/Users/Default/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+  "/mnt/windows/Windows/System32/GroupPolicy/Machine/Scripts/Startup"
+)
+
+# Create all directories
+for path in "${STARTUP_PATHS[@]}"; do
+  mkdir -p "$path"
+  log_info "Created: $path"
+done
+
+# Copy Chrome
+log_info "Copying Chrome installer..."
 cp -v /tmp/chrome.msi /mnt/windows/chrome.msi
-cp -f /tmp/win_setup.bat "$PATH_ALL_USERS/win_setup.bat"
-cp -f /tmp/win_setup.bat "$PATH_ADMIN/win_setup.bat"
+[ -f "/mnt/windows/chrome.msi" ] && log_success "Chrome copied" || log_error "Chrome copy failed!"
 
-log_success "Files injected successfully"
+# Copy batch script to ALL startup locations
+SUCCESS_COUNT=0
+for path in "${STARTUP_PATHS[@]}"; do
+  if cp -f /tmp/win_setup.bat "$path/win_setup.bat" 2>/dev/null; then
+    log_success "Copied to: $path"
+    ((SUCCESS_COUNT++))
+  else
+    log_error "Failed to copy to: $path"
+  fi
+done
 
-# --- 9. FINISH ---
-log_step "STEP 9: Cleaning Up"
+# CRITICAL: Also copy to root for manual execution
+cp -f /tmp/win_setup.bat /mnt/windows/win_setup.bat
+log_success "Backup copy at C:\\win_setup.bat"
+
+# Verify at least one copy succeeded
+if [ $SUCCESS_COUNT -eq 0 ]; then
+  log_error "CRITICAL: Failed to copy batch file to ANY startup location!"
+  exit 1
+fi
+
+log_success "Batch file copied to $SUCCESS_COUNT locations"
+
+# Create autorun registry entry (alternative method)
+log_info "Creating registry autorun entry..."
+cat > /tmp/autorun.reg << 'EOFREGISTRY'
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Run]
+"WinSetup"="C:\\win_setup.bat"
+EOFREGISTRY
+
+cp /tmp/autorun.reg /mnt/windows/autorun.reg
+log_success "Registry file created for manual import if needed"
+
+# List all injected files
+log_info "Verification - Files in Windows partition:"
+ls -lh /mnt/windows/*.bat /mnt/windows/*.msi /mnt/windows/*.reg 2>/dev/null
+
+# --- 10. FINISH ---
+log_step "STEP 10: Unmounting and Finalizing"
 sync
+sync
+sleep 3
+
 umount /mnt/windows
+log_success "Partition unmounted"
 
-echo "===================================================="
-echo "     INSTALLATION SUCCESSFUL!                      "
-echo "===================================================="
-echo " 1. Droplet is powering off NOW"
-echo " 2. Turn OFF Recovery Mode in DigitalOcean Panel"
-echo " 3. Power ON the droplet"
-echo " 4. Open Recovery Console (VNC) to see logs"
-echo " 5. Wait 2-3 minutes for setup to complete"
-echo " 6. Connect RDP to: $CLEAN_IP"
+# Final verification
+partprobe /dev/vda
+sleep 2
+
 echo ""
-echo "    RDP CREDENTIALS:"
-echo "    - Username: Administrator"
-echo "    - Password: P@ssword64"
-echo "    - RDP Port: 3389"
-echo "    - NLA: Enabled"
 echo "===================================================="
+echo "     ✓ INSTALLATION COMPLETE!                      "
+echo "===================================================="
+echo ""
+echo " NEXT STEPS:"
+echo " 1. This droplet will power off in 10 seconds"
+echo " 2. Go to DigitalOcean Control Panel"
+echo " 3. Turn OFF Recovery Mode"
+echo " 4. Power ON the droplet"
+echo " 5. Open 'Recovery Console' (VNC) immediately"
+echo " 6. You should see batch file logs in console"
+echo " 7. Wait 3-5 minutes for setup to complete"
+echo " 8. Check C:\\setup_log.txt via VNC if issues occur"
+echo ""
+echo " RDP CONNECTION INFO:"
+echo " ---------------------------------------------------"
+echo "  IP Address : $CLEAN_IP"
+echo "  Username   : Administrator"
+echo "  Password   : P@ssword64"
+echo "  Port       : 3389"
+echo "  NLA        : Enabled"
+echo " ---------------------------------------------------"
+echo ""
+echo " TROUBLESHOOTING:"
+echo "  - If batch doesn't run: Login via VNC and manually"
+echo "    double-click C:\\win_setup.bat"
+echo "  - Check C:\\setup_log.txt for detailed logs"
+echo "  - Batch file is in multiple Startup folders"
+echo ""
+echo "===================================================="
+echo ""
 
-sleep 5
+for i in {10..1}; do
+  echo -ne "\rPowering off in $i seconds... "
+  sleep 1
+done
+echo ""
+
 poweroff
