@@ -39,7 +39,7 @@ echo "  7) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") PILIHOS="https://download1590.mediafire.com/vctu3d062b8g9q9k5EF2trl88hByYiAUTniKstz1JDOA8d47LMbryoX6baYpD-JDDuqtNI8b_UVs_JU5icjvvSAYwUK_WWJyLhj5FqxLlQSmvlBDOzL2F3bVyufEMHvsPxkMFFDd8TKCsymonIM30ps5BHJTSSXI94TrlQ7hFYhlO9Ip/5bnp3aoc7pi7jl9/windows2019DO.gz";;
+  1|"") PILIHOS="https://download1590.mediafire.com/8tg1d0syg51gBQvHvV_JGFjAdSTkaPdaN6ONEFrfYRCSSeaqZwI37Uvke7vEzh6qukIOaLqbLy5gItlApqbU2HxzJpNBcCXhp-I7OVEABanRzEet18iiGBGiZZJIiqVRzMNoth5ahYtEPlteQvqCfwphN856j7yYFW5tS1m42NHmN211/5bnp3aoc7pi7jl9/windows2019DO.gz";;
   2) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
   3) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
   4) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
