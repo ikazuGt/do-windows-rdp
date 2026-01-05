@@ -29,52 +29,24 @@ wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.goog
 
 # --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
-echo "  1) Windows 2019 (Google Drive - Recommended)"
-echo "  2) Windows 2019 (MediaFire)"
-echo "  3) Windows 2019 (Pixeldrain)"
-echo "  4) Windows 10 Super Lite SF"
-echo "  5) Windows 10 Super Lite MF"
-echo "  6) Windows 10 Super Lite CF"
-echo "  7) Windows 11 Normal"
-echo "  8) Windows 10 Normal"
-echo "  9) Custom Link"
+echo "  1) Windows 2019 (Recommended)"
+echo "  2) Windows 10 Super Lite SF"
+echo "  3) Windows 10 Super Lite MF"
+echo "  4) Windows 10 Super Lite CF"
+echo "  5) Windows 11 Normal"
+echo "  6) Windows 10 Normal"
+echo "  7) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") 
-    # Google Drive - Convert sharing link to direct download
-    GDRIVE_ID="1J9IAaias9UWGQl88nNCxkxQDZKX7qfXN"
-    PILIHOS="https://drive.google.com/uc?export=download&id=${GDRIVE_ID}"
-    log_info "Using Google Drive link..."
-    ;;
-  2) 
-    PILIHOS="https://download1590.mediafire.com/xx76o9stiajgdRa9RB_ZYmAS2cuJXC2TCMcWcMQIqRLPjd4irwICDtqFIi8wOXfqGPNrvGyOBB4MYIecCl14KpQsbiTsy60rGGjEMXf2MllLbNh3F9JZ05wdhCvmcrgO18Puh-E2j7Lhl6GAne8vea4aiqaSGyyE8Tqq3JXNaof6ILw/5bnp3aoc7pi7jl9/windows2019DO.gz"
-    ;;
-  3) 
-    PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H"
-    ;;
-  4) 
-    PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1"
-    ;;
-  5) 
-    PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz"
-    ;;
-  6) 
-    PILIHOS="https://umbel.my.id/wedus10lite.gz"
-    ;;
-  7) 
-    PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11"
-    ;;
-  8) 
-    PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz"
-    ;;
-  9) 
-    read -p "Enter Direct Link: " PILIHOS
-    ;;
-  *) 
-    log_error "Invalid selection"
-    exit 1
-    ;;
+  1|"") PILIHOS="https://download1511.mediafire.com/afzpwow2ozdghj-V6T4pOf3h11A6TjpzYut_NUxcvsqLFgryNArZGhHtk_YwgXuQyFALIOQmAkjAvJfrjRkFJgCgLkJ0AUYO1nU6VEqBhYBSpP1Gs4cvnqFgPFZW4Mt_UV4zzxEQWyr-8dmikeOuQ8mcliJjYKUBT9TAhdaQQ0MP2f9i/5bnp3aoc7pi7jl9/windows2019DO.gz";;
+  2) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
+  3) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
+  4) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
+  5) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
+  6) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
+  7) read -p "Enter Direct Link: " PILIHOS;;
+  *) log_error "Invalid selection"; exit 1;;
 esac
 
 # --- 4. NETWORK DETECTION ---
@@ -333,132 +305,11 @@ log_success "Batch script created with multi-port DNS support."
 # --- 6. WRITE IMAGE ---
 log_step "STEP 6: Writing OS to Disk"
 umount -f /dev/vda* 2>/dev/null
-
-# Check if image already exists from previous failed attempt
-IMAGE_CACHE="/tmp/windows2019DO.gz"
-SKIP_DOWNLOAD=false
-
-if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
-    log_info "Found existing downloaded image: $IMAGE_CACHE"
-    FILESIZE=$(du -h "$IMAGE_CACHE" | cut -f1)
-    echo "   File size: $FILESIZE"
-    read -p "Use existing file? [Y/n]: " USE_CACHE
-    if [[ ! "$USE_CACHE" =~ ^[Nn] ]]; then
-        SKIP_DOWNLOAD=true
-        log_success "Skipping download, using cached image."
-    else
-        log_info "Removing old cache and re-downloading..."
-        rm -f "$IMAGE_CACHE"
-    fi
-fi
-
-# Download only if needed
-if [ "$SKIP_DOWNLOAD" = false ]; then
-    # Handle Google Drive downloads
-    if echo "$PILIHOS" | grep -q "drive.google.com"; then
-        log_info "Downloading from Google Drive..."
-        
-        # Extract file ID
-        GDRIVE_ID=$(echo "$PILIHOS" | grep -oP '(?<=id=)[^&]+' || echo "$PILIHOS" | grep -oP '(?<=d/)[^/]+')
-        
-        # Try multiple download methods
-        DOWNLOAD_SUCCESS=false
-        
-        # METHOD 1: Using wget with curl-style redirect following
-        log_info "Method 1: Trying direct wget download..."
-        wget --no-check-certificate --content-disposition -O "$IMAGE_CACHE" \
-             "https://drive.google.com/uc?export=download&id=${GDRIVE_ID}&confirm=t" 2>&1 | grep --line-buffered "%"
-        
-        if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
-            # Check if it's actually the file and not HTML error page
-            if file "$IMAGE_CACHE" | grep -qE "gzip|compress|data"; then
-                log_success "Download completed with Method 1"
-                DOWNLOAD_SUCCESS=true
-            else
-                log_error "Method 1 failed (got HTML instead of image)"
-                rm -f "$IMAGE_CACHE"
-            fi
-        fi
-        
-        # METHOD 2: Using gdown (if Method 1 failed)
-        if [ "$DOWNLOAD_SUCCESS" = false ]; then
-            log_info "Method 2: Trying gdown..."
-            
-            # Install gdown if not present
-            if ! command -v gdown &> /dev/null; then
-                log_info "Installing gdown..."
-                apt-get install -y python3-pip >/dev/null 2>&1
-                pip3 install -q gdown
-            fi
-            
-            if command -v gdown &> /dev/null; then
-                gdown "https://drive.google.com/uc?id=${GDRIVE_ID}" -O "$IMAGE_CACHE" --fuzzy
-                
-                if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
-                    if file "$IMAGE_CACHE" | grep -qE "gzip|compress|data"; then
-                        log_success "Download completed with Method 2 (gdown)"
-                        DOWNLOAD_SUCCESS=true
-                    else
-                        rm -f "$IMAGE_CACHE"
-                    fi
-                fi
-            fi
-        fi
-        
-        # METHOD 3: Using curl as last resort
-        if [ "$DOWNLOAD_SUCCESS" = false ]; then
-            log_info "Method 3: Trying curl..."
-            curl -L -o "$IMAGE_CACHE" \
-                 "https://drive.google.com/uc?export=download&id=${GDRIVE_ID}&confirm=t"
-            
-            if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
-                if file "$IMAGE_CACHE" | grep -qE "gzip|compress|data"; then
-                    log_success "Download completed with Method 3 (curl)"
-                    DOWNLOAD_SUCCESS=true
-                else
-                    rm -f "$IMAGE_CACHE"
-                fi
-            fi
-        fi
-        
-        # Final check
-        if [ "$DOWNLOAD_SUCCESS" = false ]; then
-            log_error "All download methods failed!"
-            log_error "Google Drive file might be too large or requires manual download."
-            log_error "Try downloading manually and place it at: $IMAGE_CACHE"
-            exit 1
-        fi
-        
-    else
-        # Non-Google Drive downloads
-        log_info "Downloading image..."
-        if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
-            wget --no-check-certificate --show-progress -O "$IMAGE_CACHE" "$PILIHOS"
-        else
-            wget --no-check-certificate --show-progress -O "$IMAGE_CACHE" "$PILIHOS"
-        fi
-        
-        if [ ! -f "$IMAGE_CACHE" ] || [ ! -s "$IMAGE_CACHE" ]; then
-            log_error "Download failed!"
-            exit 1
-        fi
-    fi
-fi
-
-# Write to disk
-log_info "Writing image to disk..."
-if file "$IMAGE_CACHE" | grep -q "gzip"; then
-    log_info "Detected gzip format, decompressing during write..."
-    gunzip < "$IMAGE_CACHE" | dd of=/dev/vda bs=4M status=progress
+if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
+  wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
 else
-    log_info "Writing raw image..."
-    dd if="$IMAGE_CACHE" of=/dev/vda bs=4M status=progress
+  wget --no-check-certificate -O- "$PILIHOS" | dd of=/dev/vda bs=4M status=progress
 fi
-
-# Keep the cache for potential retry
-log_info "Image written successfully. Cache file kept at: $IMAGE_CACHE"
-log_info "Delete it manually later with: rm -f $IMAGE_CACHE"
-
 sync
 sleep 3
 
@@ -485,20 +336,93 @@ mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o 
 
 # --- 8. INJECT FILES ---
 log_step "STEP 8: Injecting Setup Files"
+
+# Check if Windows filesystem is accessible
+if [ ! -d "/mnt/windows/Windows" ]; then
+    log_error "Windows directory not found! Mount might have failed."
+    log_error "Contents of /mnt/windows:"
+    ls -la /mnt/windows/
+    exit 1
+fi
+
 PATH_ALL_USERS="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
 PATH_ADMIN="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
-mkdir -p "$PATH_ALL_USERS" "$PATH_ADMIN"
 
-cp -v /tmp/chrome.msi /mnt/windows/chrome.msi
-cp -f /tmp/win_setup.bat "$PATH_ALL_USERS/win_setup.bat"
-cp -f /tmp/win_setup.bat "$PATH_ADMIN/win_setup.bat"
+# Create directories with error checking
+log_info "Creating startup directories..."
+mkdir -p "$PATH_ALL_USERS" || { log_error "Failed to create All Users startup folder"; exit 1; }
+mkdir -p "$PATH_ADMIN" || { log_error "Failed to create Administrator startup folder"; exit 1; }
 
-log_success "Files injected"
+# Copy files with verification
+log_info "Copying Chrome installer..."
+if cp -v /tmp/chrome.msi /mnt/windows/chrome.msi; then
+    if [ -f "/mnt/windows/chrome.msi" ]; then
+        CHROME_SIZE=$(stat -c%s "/mnt/windows/chrome.msi" 2>/dev/null || echo "0")
+        if [ "$CHROME_SIZE" -gt 1000000 ]; then
+            log_success "Chrome installer copied successfully ($CHROME_SIZE bytes)"
+        else
+            log_error "Chrome installer copy failed - file too small"
+            exit 1
+        fi
+    else
+        log_error "Chrome installer not found after copy"
+        exit 1
+    fi
+else
+    log_error "Failed to copy chrome.msi"
+    exit 1
+fi
+
+log_info "Copying setup script to All Users startup..."
+if cp -f /tmp/win_setup.bat "$PATH_ALL_USERS/win_setup.bat"; then
+    [ -f "$PATH_ALL_USERS/win_setup.bat" ] && log_success "✓ All Users startup" || { log_error "Copy verification failed"; exit 1; }
+else
+    log_error "Failed to copy to All Users startup"
+    exit 1
+fi
+
+log_info "Copying setup script to Administrator startup..."
+if cp -f /tmp/win_setup.bat "$PATH_ADMIN/win_setup.bat"; then
+    [ -f "$PATH_ADMIN/win_setup.bat" ] && log_success "✓ Administrator startup" || { log_error "Copy verification failed"; exit 1; }
+else
+    log_error "Failed to copy to Administrator startup"
+    exit 1
+fi
+
+# Final verification
+log_info "Verifying all files..."
+MISSING=0
+[ -f "/mnt/windows/chrome.msi" ] || { log_error "Missing: chrome.msi"; MISSING=1; }
+[ -f "$PATH_ALL_USERS/win_setup.bat" ] || { log_error "Missing: All Users startup script"; MISSING=1; }
+[ -f "$PATH_ADMIN/win_setup.bat" ] || { log_error "Missing: Administrator startup script"; MISSING=1; }
+
+if [ $MISSING -eq 0 ]; then
+    log_success "All files injected and verified successfully!"
+else
+    log_error "Some files are missing. Installation may fail."
+    exit 1
+fi
 
 # --- 9. FINISH ---
 log_step "STEP 9: Cleaning Up"
+
+log_info "Syncing all filesystem changes..."
 sync
-umount /mnt/windows
+sync
+log_info "Waiting for sync to complete..."
+sleep 3
+
+log_info "Unmounting Windows partition..."
+if umount /mnt/windows; then
+    log_success "Unmounted successfully"
+else
+    log_error "Unmount failed, forcing..."
+    umount -f /mnt/windows 2>/dev/null || true
+    sleep 2
+fi
+
+# Final sync
+sync
 
 echo "===================================================="
 echo "       INSTALLATION SUCCESSFUL!                     "
@@ -508,6 +432,10 @@ echo " 2. Turn OFF Recovery Mode in DigitalOcean Panel"
 echo " 3. Power ON the droplet"
 echo " 4. Open Recovery Console (VNC) to see logs"
 echo " 5. Connect RDP to: $CLEAN_IP"
+echo " "
+echo " NOTES:"
+echo " - Image cache kept at: $IMAGE_CACHE"
+echo " - Delete after successful boot: rm -f $IMAGE_CACHE"
 echo "===================================================="
 sleep 5
 poweroff
