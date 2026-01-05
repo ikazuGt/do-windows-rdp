@@ -29,7 +29,7 @@ wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.goog
 
 # --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
-echo "  1) Windows 2019 (Recommended)"
+echo "  1) Windows 2019 (Mediafire Recommended)"
 echo "  2) Windows 10 Super Lite SF"
 echo "  3) Windows 10 Super Lite MF"
 echo "  4) Windows 10 Super Lite CF"
@@ -39,7 +39,7 @@ echo "  7) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") PILIHOS="https://download1511.mediafire.com/afzpwow2ozdghj-V6T4pOf3h11A6TjpzYut_NUxcvsqLFgryNArZGhHtk_YwgXuQyFALIOQmAkjAvJfrjRkFJgCgLkJ0AUYO1nU6VEqBhYBSpP1Gs4cvnqFgPFZW4Mt_UV4zzxEQWyr-8dmikeOuQ8mcliJjYKUBT9TAhdaQQ0MP2f9i/5bnp3aoc7pi7jl9/windows2019DO.gz";;
+  1|"") PILIHOS="https://download1590.mediafire.com/5e50jbqptcrg93rPAJhpQKNYg6Lokblibjn6n-_LRZ228gYzH1mR7ER9EtWic4gOCLzxjrKWl4mKcFCvmKkkWEyPlgckm3CMiIATwXumk_jVixcs_0-pUFmBLOX3xGBT0NLvQw5lmgQvZRWmksiDsIkoAcc_92Fr-_zBfUGLJR_Di_k/5bnp3aoc7pi7jl9/windows2019DO.gz";;
   2) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
   3) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
   4) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
