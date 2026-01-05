@@ -29,26 +29,52 @@ wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.goog
 
 # --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
-echo "  1) Windows 2019 (Recommended)"
-echo "  2) Windows 2019 (Pixeldrain)"
-echo "  3) Windows 10 Super Lite SF"
-echo "  4) Windows 10 Super Lite MF"
-echo "  5) Windows 10 Super Lite CF"
-echo "  6) Windows 11 Normal"
-echo "  7) Windows 10 Normal"
-echo "  8) Custom Link"
+echo "  1) Windows 2019 (Google Drive - Recommended)"
+echo "  2) Windows 2019 (MediaFire)"
+echo "  3) Windows 2019 (Pixeldrain)"
+echo "  4) Windows 10 Super Lite SF"
+echo "  5) Windows 10 Super Lite MF"
+echo "  6) Windows 10 Super Lite CF"
+echo "  7) Windows 11 Normal"
+echo "  8) Windows 10 Normal"
+echo "  9) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") PILIHOS="https://download1590.mediafire.com/xx76o9stiajgdRa9RB_ZYmAS2cuJXC2TCMcWcMQIqRLPjd4irwICDtqFIi8wOXfqGPNrvGyOBB4MYIecCl14KpQsbiTsy60rGGjEMXf2MllLbNh3F9JZ05wdhCvmcrgO18Puh-E2j7Lhl6GAne8vea4aiqaSGyyE8Tqq3JXNaof6ILw/5bnp3aoc7pi7jl9/windows2019DO.gz";;
-  2) PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H";;
-  3) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
-  4) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
-  5) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
-  6) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
-  7) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
-  8) read -p "Enter Direct Link: " PILIHOS;;
-  *) log_error "Invalid selection"; exit 1;;
+  1|"") 
+    # Google Drive - Convert sharing link to direct download
+    GDRIVE_ID="1J9IAaias9UWGQl88nNCxkxQDZKX7qfXN"
+    PILIHOS="https://drive.google.com/uc?export=download&id=${GDRIVE_ID}"
+    log_info "Using Google Drive link..."
+    ;;
+  2) 
+    PILIHOS="https://download1590.mediafire.com/xx76o9stiajgdRa9RB_ZYmAS2cuJXC2TCMcWcMQIqRLPjd4irwICDtqFIi8wOXfqGPNrvGyOBB4MYIecCl14KpQsbiTsy60rGGjEMXf2MllLbNh3F9JZ05wdhCvmcrgO18Puh-E2j7Lhl6GAne8vea4aiqaSGyyE8Tqq3JXNaof6ILw/5bnp3aoc7pi7jl9/windows2019DO.gz"
+    ;;
+  3) 
+    PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H"
+    ;;
+  4) 
+    PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1"
+    ;;
+  5) 
+    PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz"
+    ;;
+  6) 
+    PILIHOS="https://umbel.my.id/wedus10lite.gz"
+    ;;
+  7) 
+    PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11"
+    ;;
+  8) 
+    PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz"
+    ;;
+  9) 
+    read -p "Enter Direct Link: " PILIHOS
+    ;;
+  *) 
+    log_error "Invalid selection"
+    exit 1
+    ;;
 esac
 
 # --- 4. NETWORK DETECTION ---
@@ -307,11 +333,35 @@ log_success "Batch script created with multi-port DNS support."
 # --- 6. WRITE IMAGE ---
 log_step "STEP 6: Writing OS to Disk"
 umount -f /dev/vda* 2>/dev/null
-if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
+
+# Handle Google Drive large file downloads (requires confirmation)
+if echo "$PILIHOS" | grep -q "drive.google.com"; then
+  log_info "Downloading from Google Drive..."
+  # First attempt - direct download
+  wget --no-check-certificate --show-progress -O /tmp/image_temp "$PILIHOS" 2>&1 | grep --line-buffered "%" 
+  
+  # Check if it's the virus scan warning page
+  if grep -q "Google Drive - Virus scan warning" /tmp/image_temp 2>/dev/null; then
+    log_info "Large file detected, extracting confirmation link..."
+    CONFIRM_LINK=$(grep -oP 'href="/uc\?export=download[^"]*' /tmp/image_temp | head -n1 | sed 's/href="//;s/&amp;/\&/g')
+    FULL_LINK="https://drive.google.com${CONFIRM_LINK}"
+    log_info "Retrying with confirmation..."
+    wget --no-check-certificate --show-progress -O- "$FULL_LINK" | gunzip | dd of=/dev/vda bs=4M status=progress
+  else
+    # File was small enough, decompress it
+    if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
+      cat /tmp/image_temp | gunzip | dd of=/dev/vda bs=4M status=progress
+    else
+      cat /tmp/image_temp | dd of=/dev/vda bs=4M status=progress
+    fi
+  fi
+  rm -f /tmp/image_temp
+elif echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
   wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
 else
   wget --no-check-certificate -O- "$PILIHOS" | dd of=/dev/vda bs=4M status=progress
 fi
+
 sync
 sleep 3
 
