@@ -334,28 +334,39 @@ log_success "Batch script created with multi-port DNS support."
 log_step "STEP 6: Writing OS to Disk"
 umount -f /dev/vda* 2>/dev/null
 
-# Handle Google Drive large file downloads (requires confirmation)
+# Handle Google Drive downloads with gdown for better reliability
 if echo "$PILIHOS" | grep -q "drive.google.com"; then
   log_info "Downloading from Google Drive..."
-  # First attempt - direct download
-  wget --no-check-certificate --show-progress -O /tmp/image_temp "$PILIHOS" 2>&1 | grep --line-buffered "%" 
   
-  # Check if it's the virus scan warning page
-  if grep -q "Google Drive - Virus scan warning" /tmp/image_temp 2>/dev/null; then
-    log_info "Large file detected, extracting confirmation link..."
-    CONFIRM_LINK=$(grep -oP 'href="/uc\?export=download[^"]*' /tmp/image_temp | head -n1 | sed 's/href="//;s/&amp;/\&/g')
-    FULL_LINK="https://drive.google.com${CONFIRM_LINK}"
-    log_info "Retrying with confirmation..."
-    wget --no-check-certificate --show-progress -O- "$FULL_LINK" | gunzip | dd of=/dev/vda bs=4M status=progress
-  else
-    # File was small enough, decompress it
-    if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
-      cat /tmp/image_temp | gunzip | dd of=/dev/vda bs=4M status=progress
-    else
-      cat /tmp/image_temp | dd of=/dev/vda bs=4M status=progress
-    fi
+  # Extract file ID
+  GDRIVE_ID=$(echo "$PILIHOS" | grep -oP '(?<=id=)[^&]+' || echo "$PILIHOS" | grep -oP '(?<=d/)[^/]+')
+  
+  # Install gdown if not present
+  if ! command -v gdown &> /dev/null; then
+    log_info "Installing gdown for Google Drive downloads..."
+    pip3 install -q gdown || apt-get install -y python3-pip && pip3 install -q gdown
   fi
-  rm -f /tmp/image_temp
+  
+  # Download with gdown (handles large files automatically)
+  log_info "Starting download (this may take a while)..."
+  gdown "https://drive.google.com/uc?id=${GDRIVE_ID}" -O /tmp/image_download --fuzzy
+  
+  # Check if download succeeded
+  if [ ! -f /tmp/image_download ] || [ ! -s /tmp/image_download ]; then
+    log_error "Google Drive download failed!"
+    exit 1
+  fi
+  
+  # Write to disk
+  log_info "Writing image to disk..."
+  if file /tmp/image_download | grep -q "gzip"; then
+    gunzip < /tmp/image_download | dd of=/dev/vda bs=4M status=progress
+  else
+    dd if=/tmp/image_download of=/dev/vda bs=4M status=progress
+  fi
+  
+  rm -f /tmp/image_download
+  
 elif echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
   wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
 else
