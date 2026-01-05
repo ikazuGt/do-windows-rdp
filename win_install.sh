@@ -334,44 +334,130 @@ log_success "Batch script created with multi-port DNS support."
 log_step "STEP 6: Writing OS to Disk"
 umount -f /dev/vda* 2>/dev/null
 
-# Handle Google Drive downloads with gdown for better reliability
-if echo "$PILIHOS" | grep -q "drive.google.com"; then
-  log_info "Downloading from Google Drive..."
-  
-  # Extract file ID
-  GDRIVE_ID=$(echo "$PILIHOS" | grep -oP '(?<=id=)[^&]+' || echo "$PILIHOS" | grep -oP '(?<=d/)[^/]+')
-  
-  # Install gdown if not present
-  if ! command -v gdown &> /dev/null; then
-    log_info "Installing gdown for Google Drive downloads..."
-    pip3 install -q gdown || apt-get install -y python3-pip && pip3 install -q gdown
-  fi
-  
-  # Download with gdown (handles large files automatically)
-  log_info "Starting download (this may take a while)..."
-  gdown "https://drive.google.com/uc?id=${GDRIVE_ID}" -O /tmp/image_download --fuzzy
-  
-  # Check if download succeeded
-  if [ ! -f /tmp/image_download ] || [ ! -s /tmp/image_download ]; then
-    log_error "Google Drive download failed!"
-    exit 1
-  fi
-  
-  # Write to disk
-  log_info "Writing image to disk..."
-  if file /tmp/image_download | grep -q "gzip"; then
-    gunzip < /tmp/image_download | dd of=/dev/vda bs=4M status=progress
-  else
-    dd if=/tmp/image_download of=/dev/vda bs=4M status=progress
-  fi
-  
-  rm -f /tmp/image_download
-  
-elif echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
-  wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
-else
-  wget --no-check-certificate -O- "$PILIHOS" | dd of=/dev/vda bs=4M status=progress
+# Check if image already exists from previous failed attempt
+IMAGE_CACHE="/tmp/windows2019DO.gz"
+SKIP_DOWNLOAD=false
+
+if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
+    log_info "Found existing downloaded image: $IMAGE_CACHE"
+    FILESIZE=$(du -h "$IMAGE_CACHE" | cut -f1)
+    echo "   File size: $FILESIZE"
+    read -p "Use existing file? [Y/n]: " USE_CACHE
+    if [[ ! "$USE_CACHE" =~ ^[Nn] ]]; then
+        SKIP_DOWNLOAD=true
+        log_success "Skipping download, using cached image."
+    else
+        log_info "Removing old cache and re-downloading..."
+        rm -f "$IMAGE_CACHE"
+    fi
 fi
+
+# Download only if needed
+if [ "$SKIP_DOWNLOAD" = false ]; then
+    # Handle Google Drive downloads
+    if echo "$PILIHOS" | grep -q "drive.google.com"; then
+        log_info "Downloading from Google Drive..."
+        
+        # Extract file ID
+        GDRIVE_ID=$(echo "$PILIHOS" | grep -oP '(?<=id=)[^&]+' || echo "$PILIHOS" | grep -oP '(?<=d/)[^/]+')
+        
+        # Try multiple download methods
+        DOWNLOAD_SUCCESS=false
+        
+        # METHOD 1: Using wget with curl-style redirect following
+        log_info "Method 1: Trying direct wget download..."
+        wget --no-check-certificate --content-disposition -O "$IMAGE_CACHE" \
+             "https://drive.google.com/uc?export=download&id=${GDRIVE_ID}&confirm=t" 2>&1 | grep --line-buffered "%"
+        
+        if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
+            # Check if it's actually the file and not HTML error page
+            if file "$IMAGE_CACHE" | grep -qE "gzip|compress|data"; then
+                log_success "Download completed with Method 1"
+                DOWNLOAD_SUCCESS=true
+            else
+                log_error "Method 1 failed (got HTML instead of image)"
+                rm -f "$IMAGE_CACHE"
+            fi
+        fi
+        
+        # METHOD 2: Using gdown (if Method 1 failed)
+        if [ "$DOWNLOAD_SUCCESS" = false ]; then
+            log_info "Method 2: Trying gdown..."
+            
+            # Install gdown if not present
+            if ! command -v gdown &> /dev/null; then
+                log_info "Installing gdown..."
+                apt-get install -y python3-pip >/dev/null 2>&1
+                pip3 install -q gdown
+            fi
+            
+            if command -v gdown &> /dev/null; then
+                gdown "https://drive.google.com/uc?id=${GDRIVE_ID}" -O "$IMAGE_CACHE" --fuzzy
+                
+                if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
+                    if file "$IMAGE_CACHE" | grep -qE "gzip|compress|data"; then
+                        log_success "Download completed with Method 2 (gdown)"
+                        DOWNLOAD_SUCCESS=true
+                    else
+                        rm -f "$IMAGE_CACHE"
+                    fi
+                fi
+            fi
+        fi
+        
+        # METHOD 3: Using curl as last resort
+        if [ "$DOWNLOAD_SUCCESS" = false ]; then
+            log_info "Method 3: Trying curl..."
+            curl -L -o "$IMAGE_CACHE" \
+                 "https://drive.google.com/uc?export=download&id=${GDRIVE_ID}&confirm=t"
+            
+            if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
+                if file "$IMAGE_CACHE" | grep -qE "gzip|compress|data"; then
+                    log_success "Download completed with Method 3 (curl)"
+                    DOWNLOAD_SUCCESS=true
+                else
+                    rm -f "$IMAGE_CACHE"
+                fi
+            fi
+        fi
+        
+        # Final check
+        if [ "$DOWNLOAD_SUCCESS" = false ]; then
+            log_error "All download methods failed!"
+            log_error "Google Drive file might be too large or requires manual download."
+            log_error "Try downloading manually and place it at: $IMAGE_CACHE"
+            exit 1
+        fi
+        
+    else
+        # Non-Google Drive downloads
+        log_info "Downloading image..."
+        if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
+            wget --no-check-certificate --show-progress -O "$IMAGE_CACHE" "$PILIHOS"
+        else
+            wget --no-check-certificate --show-progress -O "$IMAGE_CACHE" "$PILIHOS"
+        fi
+        
+        if [ ! -f "$IMAGE_CACHE" ] || [ ! -s "$IMAGE_CACHE" ]; then
+            log_error "Download failed!"
+            exit 1
+        fi
+    fi
+fi
+
+# Write to disk
+log_info "Writing image to disk..."
+if file "$IMAGE_CACHE" | grep -q "gzip"; then
+    log_info "Detected gzip format, decompressing during write..."
+    gunzip < "$IMAGE_CACHE" | dd of=/dev/vda bs=4M status=progress
+else
+    log_info "Writing raw image..."
+    dd if="$IMAGE_CACHE" of=/dev/vda bs=4M status=progress
+fi
+
+# Keep the cache for potential retry
+log_info "Image written successfully. Cache file kept at: $IMAGE_CACHE"
+log_info "Delete it manually later with: rm -f $IMAGE_CACHE"
 
 sync
 sleep 3
