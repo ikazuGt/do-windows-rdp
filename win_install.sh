@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# DIGITALOCEAN INSTALLER - ENHANCED VERSION
-# Date: 2025-01-06
-# Features: Multi-Port DNS, Google Drive Support, Download Caching
+# DIGITALOCEAN INSTALLER - FINAL DEBUG VERSION
+# Date: 2025-11-24
+# Fixes: Ethernet Instance 0 priority, DNS locking, Verbose Logging
 #
 
 # --- LOGGING FUNCTIONS ---
@@ -13,7 +13,7 @@ function log_step() { echo -e "\n\e[33m>>> $1 \e[0m"; }
 
 clear
 echo "===================================================="
-echo "   WINDOWS INSTALLER - ENHANCED VERSION            "
+echo "   WINDOWS INSTALLER - FINAL LOGGING VERSION        "
 echo "===================================================="
 
 # --- 1. INSTALL DEPENDENCIES ---
@@ -29,59 +29,26 @@ wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.goog
 
 # --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
-echo "  1) Windows 2019 (Google Drive - Recommended)"
-echo "  2) Windows 2019 (MediaFire)"
-echo "  3) Windows 2019 (Pixeldrain)"
-echo "  4) Windows 10 Super Lite SF"
-echo "  5) Windows 10 Super Lite MF"
-echo "  6) Windows 10 Super Lite CF"
-echo "  7) Windows 11 Normal"
-echo "  8) Windows 10 Normal"
-echo "  9) Custom Link"
+echo "  1) Windows 2019 (Recommended)"
+echo "  2) Windows 2019 (Pixeldrain)"
+echo "  3) Windows 10 Super Lite SF"
+echo "  4) Windows 10 Super Lite MF"
+echo "  5) Windows 10 Super Lite CF"
+echo "  6) Windows 11 Normal"
+echo "  7) Windows 10 Normal"
+echo "  8) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") 
-    GDRIVE_ID="1J9IAaias9UWGQl88nNCxkxQDZKX7qfXN"
-    PILIHOS="https://drive.google.com/uc?export=download&id=${GDRIVE_ID}"
-    USE_GDRIVE=true
-    ;;
-  2) 
-    PILIHOS="https://download1590.mediafire.com/xx76o9stiajgdRa9RB_ZYmAS2cuJXC2TCMcWcMQIqRLPjd4irwICDtqFIi8wOXfqGPNrvGyOBB4MYIecCl14KpQsbiTsy60rGGjEMXf2MllLbNh3F9JZ05wdhCvmcrgO18Puh-E2j7Lhl6GAne8vea4aiqaSGyyE8Tqq3JXNaof6ILw/5bnp3aoc7pi7jl9/windows2019DO.gz"
-    USE_GDRIVE=false
-    ;;
-  3) 
-    PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H"
-    USE_GDRIVE=false
-    ;;
-  4) 
-    PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1"
-    USE_GDRIVE=false
-    ;;
-  5) 
-    PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz"
-    USE_GDRIVE=false
-    ;;
-  6) 
-    PILIHOS="https://umbel.my.id/wedus10lite.gz"
-    USE_GDRIVE=false
-    ;;
-  7) 
-    PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11"
-    USE_GDRIVE=false
-    ;;
-  8) 
-    PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz"
-    USE_GDRIVE=false
-    ;;
-  9) 
-    read -p "Enter Direct Link: " PILIHOS
-    USE_GDRIVE=false
-    ;;
-  *) 
-    log_error "Invalid selection"
-    exit 1
-    ;;
+  1|"") PILIHOS="https://download1511.mediafire.com/afzpwow2ozdghj-V6T4pOf3h11A6TjpzYut_NUxcvsqLFgryNArZGhHtk_YwgXuQyFALIOQmAkjAvJfrjRkFJgCgLkJ0AUYO1nU6VEqBhYBSpP1Gs4cvnqFgPFZW4Mt_UV4zzxEQWyr-8dmikeOuQ8mcliJjYKUBT9TAhdaQQ0MP2f9i/5bnp3aoc7pi7jl9/windows2019DO.gz";;
+  2) PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H";;
+  3) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
+  4) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
+  5) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
+  6) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
+  7) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
+  8) read -p "Enter Direct Link: " PILIHOS;;
+  *) log_error "Invalid selection"; exit 1;;
 esac
 
 # --- 4. NETWORK DETECTION ---
@@ -129,7 +96,7 @@ fi
 read -p "Look correct? [Y/n]: " CONFIRM
 if [[ "$CONFIRM" =~ ^[Nn] ]]; then exit 1; fi
 
-# --- 5. GENERATE BATCH FILE (MULTI-PORT DNS FIX) ---
+# --- 5. GENERATE BATCH FILE (THE FIX) ---
 log_step "STEP 5: Generating Windows Setup Script"
 
 cat > /tmp/win_setup.bat << 'EOFBATCH'
@@ -137,7 +104,7 @@ cat > /tmp/win_setup.bat << 'EOFBATCH'
 SETLOCAL EnableDelayedExpansion
 
 REM ============================================
-REM    WINDOWS SETUP - MULTI-PORT DNS FIX
+REM    WINDOWS SETUP - VERBOSE LOGGING
 REM ============================================
 
 SET IP=PLACEHOLDER_IP
@@ -169,7 +136,7 @@ ECHO.
 ECHO [LOG] Detecting Network Adapter...
 SET ADAPTER_NAME=
 
-REM CHECK 1: Look specifically for "Ethernet Instance 0" (Most common)
+REM CHECK 1: Look specifically for "Ethernet Instance 0" (The one that works)
 netsh interface show interface name="Ethernet Instance 0" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet Instance 0"
@@ -177,15 +144,7 @@ if %errorlevel% EQU 0 (
     goto :configure_network
 )
 
-REM CHECK 2: Look specifically for "Ethernet Instance 2" (Rare cases)
-netsh interface show interface name="Ethernet Instance 2" >nul 2>&1
-if %errorlevel% EQU 0 (
-    SET "ADAPTER_NAME=Ethernet Instance 2"
-    ECHO [SUCCESS] Found Alternative Adapter: Ethernet Instance 2
-    goto :configure_network
-)
-
-REM CHECK 3: Look specifically for just "Ethernet"
+REM CHECK 2: Look specifically for just "Ethernet"
 netsh interface show interface name="Ethernet" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet"
@@ -193,7 +152,7 @@ if %errorlevel% EQU 0 (
     goto :configure_network
 )
 
-REM CHECK 4: Fallback Loop (Take the FIRST connected one and STOP)
+REM CHECK 3: Fallback Loop (Take the FIRST connected one and STOP)
 ECHO [DEBUG] Specific names not found. Scanning list...
 for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connected"') do (
     SET "ADAPTER_NAME=%%b"
@@ -222,50 +181,14 @@ if %errorlevel% EQU 0 (
 
 timeout /t 2 /nobreak >nul
 
-REM --- APPLY DNS (PRIMARY METHOD) ---
+REM --- APPLY DNS ---
 ECHO.
-ECHO [LOG] Applying DNS Settings to %ADAPTER_NAME%...
+ECHO [LOG] Applying DNS Settings...
 netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
 netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
 
-REM Force DNS with PowerShell
+REM Double check with PowerShell (Force it)
 powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
-
-REM --- APPLY DNS TO ALTERNATE PORTS (FALLBACK) ---
-ECHO [LOG] Applying DNS to alternate Ethernet ports as fallback...
-
-REM Try Ethernet Instance 0
-netsh interface show interface name="Ethernet Instance 0" >nul 2>&1
-if %errorlevel% EQU 0 (
-    if NOT "%ADAPTER_NAME%"=="Ethernet Instance 0" (
-        ECHO [DEBUG] Configuring DNS for Ethernet Instance 0...
-        netsh interface ip set dns name="Ethernet Instance 0" source=static addr=8.8.8.8 >nul 2>&1
-        netsh interface ip add dns name="Ethernet Instance 0" addr=8.8.4.4 index=2 >nul 2>&1
-        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet Instance 0' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
-    )
-)
-
-REM Try Ethernet Instance 2
-netsh interface show interface name="Ethernet Instance 0 2" >nul 2>&1
-if %errorlevel% EQU 0 (
-    if NOT "%ADAPTER_NAME%"=="Ethernet Instance 2" (
-        ECHO [DEBUG] Configuring DNS for Ethernet Instance 0 2...
-        netsh interface ip set dns name="Ethernet Instance 0 2" source=static addr=8.8.8.8 >nul 2>&1
-        netsh interface ip add dns name="Ethernet Instance 0 2" addr=8.8.4.4 index=2 >nul 2>&1
-        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet Instance 2' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
-    )
-)
-
-REM Try standard Ethernet
-netsh interface show interface name="Ethernet" >nul 2>&1
-if %errorlevel% EQU 0 (
-    if NOT "%ADAPTER_NAME%"=="Ethernet" (
-        ECHO [DEBUG] Configuring DNS for Ethernet...
-        netsh interface ip set dns name="Ethernet" source=static addr=8.8.8.8 >nul 2>&1
-        netsh interface ip add dns name="Ethernet" addr=8.8.4.4 index=2 >nul 2>&1
-        powershell -Command "Set-DnsClientServerAddress -InterfaceAlias 'Ethernet' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
-    )
-)
 
 ECHO [LOG] Flushing DNS Cache...
 ipconfig /flushdns
@@ -335,69 +258,16 @@ sed -i "s/PLACEHOLDER_IP/$CLEAN_IP/g" /tmp/win_setup.bat
 sed -i "s/PLACEHOLDER_MASK/$SUBNET_MASK/g" /tmp/win_setup.bat
 sed -i "s/PLACEHOLDER_GW/$GW/g" /tmp/win_setup.bat
 
-log_success "Batch script created with multi-port DNS support."
+log_success "Batch script created with debug logs."
 
-# --- 6. DOWNLOAD & WRITE IMAGE ---
-log_step "STEP 6: Downloading and Writing OS to Disk"
+# --- 6. WRITE IMAGE ---
+log_step "STEP 6: Writing OS to Disk"
 umount -f /dev/vda* 2>/dev/null
-
-IMAGE_CACHE="/tmp/windows_image.gz"
-
-# Check for cached image
-if [ -f "$IMAGE_CACHE" ] && [ -s "$IMAGE_CACHE" ]; then
-    FILESIZE=$(du -h "$IMAGE_CACHE" | cut -f1)
-    log_info "Found cached image: $FILESIZE"
-    read -p "Use cached image? [Y/n]: " USE_CACHE
-    if [[ "$USE_CACHE" =~ ^[Nn] ]]; then
-        rm -f "$IMAGE_CACHE"
-        log_info "Cache deleted, will re-download."
-    else
-        log_success "Using cached image"
-        SKIP_DOWNLOAD=true
-    fi
-fi
-
-# Download if needed
-if [ "$SKIP_DOWNLOAD" != "true" ]; then
-    if [ "$USE_GDRIVE" = true ]; then
-        log_info "Downloading from Google Drive..."
-        
-        # Install gdown if not present
-        if ! command -v gdown &> /dev/null; then
-            log_info "Installing gdown for Google Drive downloads..."
-            apt-get install -y python3-pip >/dev/null 2>&1
-            pip3 install -q gdown
-        fi
-        
-        # Extract file ID and download
-        GDRIVE_ID=$(echo "$PILIHOS" | grep -oP '(?<=id=)[^&]+')
-        
-        if gdown "https://drive.google.com/uc?id=${GDRIVE_ID}" -O "$IMAGE_CACHE" --fuzzy; then
-            log_success "Google Drive download completed"
-        else
-            log_error "Google Drive download failed"
-            exit 1
-        fi
-    else
-        # Standard download
-        log_info "Downloading image..."
-        if wget --no-check-certificate --show-progress -O "$IMAGE_CACHE" "$PILIHOS"; then
-            log_success "Download completed"
-        else
-            log_error "Download failed"
-            exit 1
-        fi
-    fi
-fi
-
-# Write to disk
-log_info "Writing image to disk..."
-if echo "$PILIHOS" | grep -qiE '\.gz($|\?)' || file "$IMAGE_CACHE" | grep -q "gzip"; then
-    gunzip < "$IMAGE_CACHE" | dd of=/dev/vda bs=4M status=progress
+if echo "$PILIHOS" | grep -qiE '\.gz($|\?)'; then
+  wget --no-check-certificate -O- "$PILIHOS" | gunzip | dd of=/dev/vda bs=4M status=progress
 else
-    dd if="$IMAGE_CACHE" of=/dev/vda bs=4M status=progress
+  wget --no-check-certificate -O- "$PILIHOS" | dd of=/dev/vda bs=4M status=progress
 fi
-
 sync
 sleep 3
 
@@ -447,9 +317,6 @@ echo " 2. Turn OFF Recovery Mode in DigitalOcean Panel"
 echo " 3. Power ON the droplet"
 echo " 4. Open Recovery Console (VNC) to see logs"
 echo " 5. Connect RDP to: $CLEAN_IP"
-echo ""
-echo " NOTE: Image cached at $IMAGE_CACHE"
-echo " Delete after successful boot: rm -f $IMAGE_CACHE"
 echo "===================================================="
 sleep 5
 poweroff
