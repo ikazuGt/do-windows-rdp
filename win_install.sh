@@ -324,5 +324,3 @@ echo " 5. Connect RDP to: $CLEAN_IP"
 echo "===================================================="
 sleep 5
 poweroff
-
-why does the option for windows 2012 failed to inject the iso, it kept searching for the partition
