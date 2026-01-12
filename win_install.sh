@@ -31,23 +31,27 @@ wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.goog
 log_step "STEP 3: Select Operating System"
 echo "  1) Windows 2019 (Recommended)"
 echo "  2) Windows 2019 (Pixeldrain)"
-echo "  3) Windows 10 Super Lite SF"
-echo "  4) Windows 10 Super Lite MF"
-echo "  5) Windows 10 Super Lite CF"
-echo "  6) Windows 11 Normal"
-echo "  7) Windows 10 Normal"
-echo "  8) Custom Link"
+echo "  3) Windows 2016 (Sourceforge)"
+echo "  4) Windows 2012 (Sourceforge)"
+echo "  5) Windows 10 Super Lite SF"
+echo "  6) Windows 10 Super Lite MF"
+echo "  7) Windows 10 Super Lite CF"
+echo "  8) Windows 11 Normal"
+echo "  9) Windows 10 Normal"
+echo "  10) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
   1|"") PILIHOS="https://download1590.mediafire.com/ft4ksz9192nglNA6L4npPrSFHYdAvAhIk8ivjaO89aF1HnMya75ZVxmAfAXwPy4PtumcGMfn4AUmM0p_sLi3qGBigsqeoqUclxjZa1Uwq3oGyQBhS4XGkwrsKLBiVBw_RSSYxFD0rSCHgio6OXDlFXaAsOX8Zq2zZT5qrZt13wW3oLS1/5bnp3aoc7pi7jl9/windows2019DO.gz";;
   2) PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H";;
-  3) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
-  4) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
-  5) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
-  6) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
-  7) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
-  8) read -p "Enter Direct Link: " PILIHOS;;
+  3) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2016.gz/download"
+  4) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2012.gz/download"
+  5) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
+  6) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
+  7) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
+  8) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win11";;
+  9) PILIHOS="https://windows-on-cloud.wansaw.com/0:/win10_en.gz";;
+  10) read -p "Enter Direct Link: " PILIHOS;;
   *) log_error "Invalid selection"; exit 1;;
 esac
 
