@@ -44,8 +44,8 @@ read -p "Select [1]: " PILIHOS
 case "$PILIHOS" in
   1|"") PILIHOS="https://download1590.mediafire.com/ft4ksz9192nglNA6L4npPrSFHYdAvAhIk8ivjaO89aF1HnMya75ZVxmAfAXwPy4PtumcGMfn4AUmM0p_sLi3qGBigsqeoqUclxjZa1Uwq3oGyQBhS4XGkwrsKLBiVBw_RSSYxFD0rSCHgio6OXDlFXaAsOX8Zq2zZT5qrZt13wW3oLS1/5bnp3aoc7pi7jl9/windows2019DO.gz";;
   2) PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H";;
-  3) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2016.gz/download"
-  4) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2012.gz/download"
+  3) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2016.gz/download";;
+  4) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2012.gz/download";;
   5) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
   6) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
   7) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
