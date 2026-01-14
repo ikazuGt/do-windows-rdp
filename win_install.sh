@@ -42,7 +42,7 @@ echo "  10) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") PILIHOS="https://download1590.mediafire.com/rgwe87warjxgSh1NSkNOBEQ82srYO0Kkj9bfB7VCc0E-TOBEo9mB2IQk_StE6FL2Cjopju0Wne8WVYvsfeSY9aXRk0r18rNicEwqzOWeA_y5TQUPUy-7UCG29l3eFJYo8pNmKwhGRfeVAc94agEgqFZLT0MJYDIdDcTFa6NOUlP9y9Z_/5bnp3aoc7pi7jl9/windows2019DO.gz";;
+  1|"") PILIHOS="https://download1590.mediafire.com/wxnm4wo0bwvgE8TQc60PNDL3CREsPGMhjFhxgQXUb37KlGd2DIxm87-eAqg_xJLPWvNM_KPZw7f1zq1WuQbJoBG_fYx0FKcB1Hcn4B9SlLOZ6MeHwJnE5gWT08K1cvk_y58vbu4swHTyPg2Hqixj439MbhpthWuFueSqXydrd2p-k0P6/5bnp3aoc7pi7jl9/windows2019DO.gz";;
   2) PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H";;
   3) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2016.gz/download";;
   4) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2012.gz/download";;
