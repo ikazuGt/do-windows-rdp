@@ -123,8 +123,8 @@ if [[ "$PILIHOS" == GDRIVE:* ]]; then
     FILE_ID="${PILIHOS#GDRIVE:}"
     download_gdrive "$FILE_ID" "$TMP_IMG"
     if ! file "$TMP_IMG" | grep -qi gzip; then
-    log_error "Google Drive returned HTML instead of image. Download blocked."
-    exit 1
+        log_error "Google Drive returned HTML instead of image. Download blocked."
+        exit 1
     fi
     gunzip -c "$TMP_IMG" | dd of=/dev/vda bs=4M status=progress
     rm -f "$TMP_IMG"
