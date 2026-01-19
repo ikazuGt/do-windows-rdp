@@ -29,8 +29,8 @@ wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.goog
 
 # --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
-echo "  1) Windows 2019 (Recommended)"
-echo "  2) Windows 2019 (Pixeldrain)"
+echo "  1) Windows 2019 (Cloudflare R2 Recommended)"
+echo "  2) Windows 2019 (Mediafire (Recommended Lama))"
 echo "  3) Windows 2016 (Sourceforge)"
 echo "  4) Windows 2012 (Sourceforge)"
 echo "  5) Windows 10 Super Lite SF"
@@ -42,8 +42,8 @@ echo "  10) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") PILIHOS="https://download1590.mediafire.com/azuel5cj7mhgGPHrF3ASzRk9obFoHx3_b-ICHzMjNCT4djMsZYjJROTESlZtyvdFqZsIVLEOG0CRtVRDZBI50a-7PQh03U5ZQnkDqn_EUKsC0e85BbaQLv0F8mZmdUw2fic4GgweHa2DjA1Z6KpmjOWPq64-pWx9ouwDQ59s_4Fx/5bnp3aoc7pi7jl9/windows2019DO.gz";;
-  2) PILIHOS="https://pixeldrain.com/api/file/Cx29Sb9H";;
+  1|"") PILIHOS="https://pub-24c03f7a3eff4fa6936c33e2474d6905.r2.dev/windows2019DO.gz";;
+  2) PILIHOS="https://download1590.mediafire.com/azuel5cj7mhgGPHrF3ASzRk9obFoHx3_b-ICHzMjNCT4djMsZYjJROTESlZtyvdFqZsIVLEOG0CRtVRDZBI50a-7PQh03U5ZQnkDqn_EUKsC0e85BbaQLv0F8mZmdUw2fic4GgweHa2DjA1Z6KpmjOWPq64-pWx9ouwDQ59s_4Fx/5bnp3aoc7pi7jl9/windows2019DO.gz";;
   3) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2016.gz/download";;
   4) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2012.gz/download";;
   5) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
