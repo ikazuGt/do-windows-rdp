@@ -16,9 +16,10 @@ echo "   WINDOWS INSTALLER - FINAL LOGGING VERSION        "
 echo "===================================================="
 
 # --- GOOGLE DRIVE DOWNLOAD FUNCTION ---
+# --- GOOGLE DRIVE DOWNLOAD FUNCTION ---
 download_gdrive() {
     FILE_ID="$1"
-    OUTPUT видно="$2"
+    OUTPUT="$2"
     COOKIE_FILE="/tmp/gdrive_cookies.txt"
 
     log_info "Downloading from Google Drive (large file mode)..."
@@ -37,6 +38,7 @@ download_gdrive() {
 
     rm -f "$COOKIE_FILE"
 }
+
 
 # --- 1. INSTALL DEPENDENCIES ---
 log_step "STEP 1: Installing Dependencies"
@@ -90,9 +92,11 @@ case "$CLEAN_PREFIX" in
     *) SUBNET_MASK="255.255.255.0";;
 esac
 
-echo "IP: $CLEAN_IP"
-echo "MASK: $SUBNET_MASK"
-echo "GW: $GW"
+echo " ---------------------------" 
+echo " IP : $CLEAN_IP" 
+echo " Subnet Mask : $SUBNET_MASK"
+echo " Gateway : $GW"
+echo " ---------------------------"
 read -p "Look correct? [Y/n]: " CONFIRM
 [[ "$CONFIRM" =~ ^[Nn] ]] && exit 1
 
