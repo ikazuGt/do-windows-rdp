@@ -20,25 +20,42 @@ echo "===================================================="
 download_gdrive() {
     FILE_ID="$1"
     OUTPUT="$2"
+
     COOKIE_FILE="/tmp/gdrive_cookies.txt"
+    HTML_FILE="/tmp/gdrive_page.html"
 
     log_info "Downloading from Google Drive (large file mode)..."
 
-    CONFIRM=$(wget --quiet \
+    # Step 1: Initial request (save cookies + page)
+    wget --quiet \
         --save-cookies "$COOKIE_FILE" \
         --keep-session-cookies \
         --no-check-certificate \
         "https://drive.google.com/uc?export=download&id=${FILE_ID}" \
-        -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1/p')
+        -O "$HTML_FILE"
 
-    wget --no-check-certificate \
-        --load-cookies "$COOKIE_FILE" \
-        "https://drive.google.com/uc?export=download&confirm=${CONFIRM}&id=${FILE_ID}" \
-        -O "$OUTPUT"
+    # Step 2: Try to extract confirm token (if any)
+    CONFIRM=$(sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1/p' "$HTML_FILE")
 
-    rm -f "$COOKIE_FILE"
+    # Step 3: Download file (with or without confirm)
+    if [ -n "$CONFIRM" ]; then
+        wget --no-check-certificate \
+            --load-cookies "$COOKIE_FILE" \
+            "https://drive.google.com/uc?export=download&confirm=${CONFIRM}&id=${FILE_ID}" \
+            -O "$OUTPUT"
+    else
+        wget --no-check-certificate \
+            --load-cookies "$COOKIE_FILE" \
+            "https://drive.google.com/uc?export=download&id=${FILE_ID}" \
+            -O "$OUTPUT"
+    fi
+
+    rm -f "$COOKIE_FILE" "$HTML_FILE"
 }
-
+if ! file "$TMP_IMG" | grep -qi gzip; then
+    log_error "Google Drive returned HTML instead of image. Download blocked."
+    exit 1
+fi
 
 # --- 1. INSTALL DEPENDENCIES ---
 log_step "STEP 1: Installing Dependencies"
