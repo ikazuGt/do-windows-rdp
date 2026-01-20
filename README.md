@@ -6,4 +6,7 @@ For Windows Server 2019-2022 And Older
 
 For Windows 2019 (Using Init Script)
 
-```wget https://raw.githubusercontent.com/ikazuGt/do-windows-rdp/refs/heads/main/win2019.sh && bash win2019.sh ```
+```
+#!/bin/bash
+curl -sSL https://raw.githubusercontent.com/ikazuGt/do-windows-rdp/main/win2019.sh | bash
+```
