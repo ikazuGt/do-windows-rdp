@@ -45,7 +45,7 @@ case "$PILIHOS" in
   1|"") PILIHOS="https://pub-24c03f7a3eff4fa6936c33e2474d6905.r2.dev/windows2019DO.gz";;
   2) PILIHOS="https://download1590.mediafire.com/azuel5cj7mhgGPHrF3ASzRk9obFoHx3_b-ICHzMjNCT4djMsZYjJROTESlZtyvdFqZsIVLEOG0CRtVRDZBI50a-7PQh03U5ZQnkDqn_EUKsC0e85BbaQLv0F8mZmdUw2fic4GgweHa2DjA1Z6KpmjOWPq64-pWx9ouwDQ59s_4Fx/5bnp3aoc7pi7jl9/windows2019DO.gz";;
   3) PILIHOS="https://sourceforge.net/projects/nixpoin/files/windows2016.gz/download";;
-  4) PILIHOS="https://www.mediafire.com/file/i2d5cf30xo4ikzz/windows2012.gz/file";;
+  4) PILIHOS="https://download853.mediafire.com/tuef8sbhwspgl_zR6OK3WVrfalwkExPoAVtac6ergZ-7qPAqhpTuMW1HZgilIYT8aPHGCcQT1YcK0twtGdysR-Fb8uM286e4Wh-DBNfnBRHEiP6sjpXGgzCrf554RkATdx9zsFwloJNrlXcG_j2uZJWC-_FzR6Dq2P5gtB2dg7LNZiUD/i2d5cf30xo4ikzz/windows2012.gz";;
   5) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
   6) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
   7) PILIHOS="https://umbel.my.id/wedus10lite.gz";;
