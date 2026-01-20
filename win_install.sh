@@ -30,8 +30,8 @@ wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.goog
 # --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
 echo "  1) Windows 2019 (Cloudflare R2 Recommended)"
-echo "  2) Windows 2019 (Mediafire (Recommended Lama))"
-echo "  3) Windows 2016 (Sourceforge)"
+echo "  2) Windows 2019 (Mediafire [Faster])"
+echo "  3) Windows 2016 (Sourceforge [Slow])"
 echo "  4) Windows 2012 (Mediafire)"
 echo "  5) Windows 10 Super Lite SF"
 echo "  6) Windows 10 Super Lite MF"
