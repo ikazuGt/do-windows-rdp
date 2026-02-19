@@ -29,9 +29,9 @@ wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi "https://dl.goog
 
 # --- 3. OS SELECTION ---
 log_step "STEP 3: Select Operating System"
-echo "  1) Windows 2019 (Cloudflare R2 Recommended)"
-echo "  2) Windows 2019 (Mediafire [Faster])"
-echo "  3) Windows 2016 (Cloudflare R2)"
+echo "  1) Windows 2019 (Cloudflare R2 Recommended (EastNoth USA Server))"
+echo "  2) Windows 2016 (Cloudflare R2 (ASIA))"
+echo "  3) Windows 2012 (Cloudflare R2)"
 echo "  4) Windows 2012 (Mediafire)"
 echo "  5) Windows 10 Super Lite SF"
 echo "  6) Windows 10 Super Lite MF"
@@ -42,9 +42,9 @@ echo "  10) Custom Link"
 read -p "Select [1]: " PILIHOS
 
 case "$PILIHOS" in
-  1|"") PILIHOS="https://pub-24c03f7a3eff4fa6936c33e2474d6905.r2.dev/windows2019.gz";;
-  2) PILIHOS="https://download1590.mediafire.com/azuel5cj7mhgGPHrF3ASzRk9obFoHx3_b-ICHzMjNCT4djMsZYjJROTESlZtyvdFqZsIVLEOG0CRtVRDZBI50a-7PQh03U5ZQnkDqn_EUKsC0e85BbaQLv0F8mZmdUw2fic4GgweHa2DjA1Z6KpmjOWPq64-pWx9ouwDQ59s_4Fx/5bnp3aoc7pi7jl9/windows2019DO.gz";;
-  3) PILIHOS="https://pub-4e34d7f04a65410db003c8e1ef00b82a.r2.dev/windows2016.gz";;
+  1|"") PILIHOS="https://pub-ae5f0a8e1c6a44c18627093c61f07475.r2.dev/windows2019.gz";;
+  2) PILIHOS="https://pub-4e34d7f04a65410db003c8e1ef00b82a.r2.dev/windows2016.gz";;
+  3) PILIHOS="https://pub-fc6d708fb1964c6b8f443ade49ee2749.r2.dev/windows2012.gz";;
   4) PILIHOS="https://download853.mediafire.com/tuef8sbhwspgl_zR6OK3WVrfalwkExPoAVtac6ergZ-7qPAqhpTuMW1HZgilIYT8aPHGCcQT1YcK0twtGdysR-Fb8uM286e4Wh-DBNfnBRHEiP6sjpXGgzCrf554RkATdx9zsFwloJNrlXcG_j2uZJWC-_FzR6Dq2P5gtB2dg7LNZiUD/i2d5cf30xo4ikzz/windows2012.gz";;
   5) PILIHOS="https://master.dl.sourceforge.net/project/manyod/wedus10lite.gz?viasf=1";;
   6) PILIHOS="https://download1582.mediafire.com/lemxvneeredgyBT5P6YtAU5Dq-mikaH29djd8VnlyMcV1iM_vHJzYCiTc8V3PQkUslqgQSG0ftRJ0X2w3t1D7T4a-616-phGqQ2xKCn8894r0fdV9jKMhVYKH8N1dXMvtsZdK6e4t9F4Hg66wCzpXvuD_jcRu9_-i65_Kbr-HeW8Bw/gcxlheshfpbyigg/wedus10lite.gz";;
