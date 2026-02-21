@@ -167,7 +167,7 @@ for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connec
 :configure_network
 if "%ADAPTER_NAME%"=="" (
     ECHO [CRITICAL ERROR] No network adapter found!
-    goto :keep_open
+goto :keep_open
 )
 
 ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%"
@@ -175,12 +175,12 @@ ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%"
 REM --- APPLY IP ---
 ECHO.
 ECHO [LOG] Applying IP Address...
-netsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
+etsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
 if %errorlevel% EQU 0 (
     ECHO [SUCCESS] IP Applied.
 ) else (
     ECHO [ERROR] Failed to set IP. Retrying with PowerShell...
-    powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength 24 -DefaultGateway %GW%"
+powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength 24 -DefaultGateway %GW%"
 )
 
 timeout /t 2 /nobreak >nul
@@ -188,7 +188,7 @@ timeout /t 2 /nobreak >nul
 REM --- APPLY DNS ---
 ECHO.
 ECHO [LOG] Applying DNS Settings...
-netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
+etsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
 netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
 
 REM Double check with PowerShell (Force it)
@@ -229,6 +229,13 @@ reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >nul
 netsh advfirewall firewall add rule name="RDP_3389" dir=in action=allow protocol=TCP localport=3389 >nul
 ECHO [SUCCESS] RDP Enabled on Port 3389.
+
+REM --- DISABLE ACCOUNT LOCKOUT ---
+ECHO.
+ECHO [LOG] Disabling account lockout policy...
+net accounts /lockoutthreshold:0
+reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\RemoteAccess\Parameters\AccountLockout" /v MaxDenials /t REG_DWORD /d 0 /f >nul 2>&1
+ECHO [SUCCESS] Account lockout disabled.
 
 REM --- INSTALL CHROME ---
 ECHO.
@@ -280,31 +287,31 @@ log_step "STEP 7: Mounting Windows Partition"
 partprobe /dev/vda
 sleep 5
 
-TARGET=""
+target=""
 for i in {1..10}; do
-    if [ -b /dev/vda2 ]; then TARGET="/dev/vda2"; break; fi
-    if [ -b /dev/vda1 ]; then TARGET="/dev/vda1"; break; fi
+    if [ -b /dev/vda2 ]; then target="/dev/vda2"; break; fi
+    if [ -b /dev/vda1 ]; then target="/dev/vda1"; break; fi
     echo "   Searching for partition... ($i/10)"
     sleep 2
     partprobe /dev/vda
 done
-[ -z "$TARGET" ] && { log_error "Partition not found."; exit 1; }
+[ -z "$target" ] && { log_error "Partition not found."; exit 1; }
 
-log_info "Partition Found: $TARGET. Fixing NTFS..."
-ntfsfix -d "$TARGET" > /dev/null 2>&1
+log_info "Partition Found: $target. Fixing NTFS..."
+t ntfsfix -d "$target" > /dev/null 2>&1
 
 mkdir -p /mnt/windows
-mount.ntfs-3g -o remove_hiberfile,rw "$TARGET" /mnt/windows || mount.ntfs-3g -o force,rw "$TARGET" /mnt/windows
+mount.ntfs-3g -o remove_hiberfile,rw "$target" /mnt/windows || mount.ntfs-3g -o force,rw "$target" /mnt/windows
 
 # --- 8. INJECT FILES ---
 log_step "STEP 8: Injecting Setup Files"
-PATH_ALL_USERS="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
-PATH_ADMIN="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
-mkdir -p "$PATH_ALL_USERS" "$PATH_ADMIN"
+path_all_users="/mnt/windows/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
+path_admin="/mnt/windows/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+mkdir -p "$path_all_users" "$path_admin"
 
 cp -v /tmp/chrome.msi /mnt/windows/chrome.msi
-cp -f /tmp/win_setup.bat "$PATH_ALL_USERS/win_setup.bat"
-cp -f /tmp/win_setup.bat "$PATH_ADMIN/win_setup.bat"
+cp -f /tmp/win_setup.bat "$path_all_users/win_setup.bat"
+cp -f /tmp/win_setup.bat "$path_admin/win_setup.bat"
 
 log_success "Files injected"
 
@@ -312,7 +319,6 @@ log_success "Files injected"
 log_step "STEP 9: Cleaning Up"
 sync
 umount /mnt/windows
-
 echo "===================================================="
 echo "       INSTALLATION SUCCESSFUL!                     "
 echo "===================================================="
