@@ -7,7 +7,6 @@
 # Date: 2026-02-21
 # Tested on: Debian 11 (DigitalOcean Droplets)
 #
-
 set -euo pipefail
 
 # --- COLORS & LOGGING ---
@@ -88,7 +87,8 @@ if [[ "$CLEAN_IP" == *"/"* ]] || [ -z "$CLEAN_IP" ]; then
 fi
 
 read -p "Network info correct? [Y/n]: " CONFIRM
-if [[ "${CONFIRM:-Y}" =~ ^[Nn] ]]; then exit 1; fi
+if [[ "
+${CONFIRM:-Y}" =~ ^[Nn] ]]; then exit 1; fi
 
 # --- 2. DETECT DISK ---
 log_step "STEP 2: Detecting Target Disk"
@@ -118,7 +118,8 @@ echo "  9) Windows 10 Normal"
 echo "  10) Custom Link"
 read -p "Select [1]: " PILIHOS
 
-case "${PILIHOS:-1}" in
+case "
+${PILIHOS:-1}" in
   1) IMG_URL="https://pub-ae5f0a8e1c6a44c18627093c61f07475.r2.dev/windows2019.gz";;
   2) IMG_URL="https://pub-4e34d7f04a65410db003c8e1ef00b82a.r2.dev/windows2016.gz";;
   3) IMG_URL="https://pub-fc6d708fb1964c6b8f443ade49ee2749.r2.dev/windows2012.gz";;
@@ -223,12 +224,12 @@ ECHO [LOG] Using Adapter: "%ADAPTER_NAME%"
 
 REM --- APPLY IP ---
 ECHO [LOG] Setting IP Address...
-netsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
+etsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
 if %errorlevel% EQU 0 (
     ECHO [OK] IP Applied.
 ) else (
     ECHO [WARN] netsh failed, trying PowerShell...
-    powershell -Command "Remove-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -Confirm:\$false" >nul 2>&1
+powershell -Command "Remove-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -Confirm:\$false" >nul 2>&1
     powershell -Command "Remove-NetRoute -InterfaceAlias '%ADAPTER_NAME%' -Confirm:\$false" >nul 2>&1
     powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength ${CLEAN_PREFIX} -DefaultGateway %GW%"
 )
@@ -237,7 +238,7 @@ timeout /t 2 /nobreak >nul
 
 REM --- APPLY DNS ---
 ECHO [LOG] Setting DNS...
-netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
+etsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
 netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
 powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
 ipconfig /flushdns
@@ -271,6 +272,12 @@ reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >nul 2>&1
 netsh advfirewall firewall add rule name="RDP_3389" dir=in action=allow protocol=TCP localport=3389 >nul 2>&1
 ECHO [OK] RDP Enabled on port 3389.
+
+REM --- DISABLE ACCOUNT LOCKOUT ---
+ECHO [LOG] Disabling account lockout policy...
+net accounts /lockoutthreshold:0
+reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\RemoteAccess\Parameters\AccountLockout" /v MaxDenials /t REG_DWORD /d 0 /f >nul 2>&1
+ECHO [OK] Account lockout disabled.
 
 REM --- INSTALL CHROME ---
 if exist "C:\chrome.msi" (
@@ -321,7 +328,7 @@ if [ "$FINAL_CONFIRM" != "YES" ]; then
     exit 1
 fi
 
-log_info "Creating RAM workspace..."
+log_info "Creating RAM workspace..." 
 mkdir -p /ramboot
 mount -t tmpfs -o size=800M tmpfs /ramboot
 
@@ -348,7 +355,8 @@ fi
 # Copy all shared libraries these binaries need
 log_info "Copying shared libraries..."
 for bin in /ramboot/bin/*; do
-    ldd "$bin" 2>/dev/null | grep -oP '(/[^\s]+)' | while read lib; do
+    ldd "$bin" 2>/dev/null | grep -oP '(/[^
+]+)' | while read lib; do
         if [ -f "$lib" ]; then
             DEST_DIR="/ramboot$(dirname "$lib")"
             mkdir -p "$DEST_DIR"
