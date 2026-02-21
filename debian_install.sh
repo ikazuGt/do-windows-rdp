@@ -87,8 +87,7 @@ if [[ "$CLEAN_IP" == *"/"* ]] || [ -z "$CLEAN_IP" ]; then
 fi
 
 read -p "Network info correct? [Y/n]: " CONFIRM
-if [[ "
-${CONFIRM:-Y}" =~ ^[Nn] ]]; then exit 1; fi
+if [[ "${CONFIRM:-Y}" =~ ^[Nn] ]]; then exit 1; fi
 
 # --- 2. DETECT DISK ---
 log_step "STEP 2: Detecting Target Disk"
@@ -118,8 +117,7 @@ echo "  9) Windows 10 Normal"
 echo "  10) Custom Link"
 read -p "Select [1]: " PILIHOS
 
-case "
-${PILIHOS:-1}" in
+case "${PILIHOS:-1}" in
   1) IMG_URL="https://pub-ae5f0a8e1c6a44c18627093c61f07475.r2.dev/windows2019.gz";;
   2) IMG_URL="https://pub-4e34d7f04a65410db003c8e1ef00b82a.r2.dev/windows2016.gz";;
   3) IMG_URL="https://pub-fc6d708fb1964c6b8f443ade49ee2749.r2.dev/windows2012.gz";;
@@ -211,20 +209,20 @@ REM Last resort: first connected adapter
 for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connected"') do (
     SET "ADAPTER_NAME=%%b"
     ECHO [OK] Found connected adapter: !ADAPTER_NAME!
-    goto :configure_network
+goto :configure_network
 )
 
 :configure_network
 if "%ADAPTER_NAME%"=="" (
     ECHO [CRITICAL] No network adapter found!
-    goto :keep_open
+goto :keep_open
 )
 
 ECHO [LOG] Using Adapter: "%ADAPTER_NAME%"
 
 REM --- APPLY IP ---
 ECHO [LOG] Setting IP Address...
-etsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
+netsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
 if %errorlevel% EQU 0 (
     ECHO [OK] IP Applied.
 ) else (
@@ -238,7 +236,7 @@ timeout /t 2 /nobreak >nul
 
 REM --- APPLY DNS ---
 ECHO [LOG] Setting DNS...
-etsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
+netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
 netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
 powershell -Command "Set-DnsClientServerAddress -InterfaceAlias '%ADAPTER_NAME%' -ServerAddresses 8.8.8.8,8.8.4.4" >nul 2>&1
 ipconfig /flushdns
@@ -328,7 +326,7 @@ if [ "$FINAL_CONFIRM" != "YES" ]; then
     exit 1
 fi
 
-log_info "Creating RAM workspace..." 
+log_info "Creating RAM workspace..."
 mkdir -p /ramboot
 mount -t tmpfs -o size=800M tmpfs /ramboot
 
@@ -383,7 +381,7 @@ fi
 
 # Copy required config
 cp -f /etc/resolv.conf /ramboot/etc/ 2>/dev/null || true
-cp -f /etc/ssl -r /ramboot/etc/ 2>/dev/null || true
+cp -rf /etc/ssl /ramboot/etc/ 2>/dev/null || true
 cp -af /etc/alternatives /ramboot/etc/ 2>/dev/null || true
 
 # Copy temp files we need
@@ -555,9 +553,9 @@ echo "  │  The install will continue in the background.   │"
 echo "  │  The VPS will auto-reboot into Windows.         │"
 echo "  │                                                 │"
 echo "  │  Wait ~5-15 minutes, then connect via RDP:      │"
-echo "  │  IP: $CLEAN_IP"
-echo "  │  User: Administrator                            │"
-echo "  │  Pass: Pc@2024                                  │"
+echo "  IP: $CLEAN_IP"
+echo "  User: Administrator                            │"
+echo "  Pass: Pc@2024                                  │"
 echo "  └─────────────────────────────────────────────────┘"
 echo ""
 sleep 3
