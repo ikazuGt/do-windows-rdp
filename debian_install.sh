@@ -351,10 +351,11 @@ if command -v busybox &>/dev/null; then
 fi
 
 # Copy all shared libraries these binaries need
+# FIX: replaced 'grep -oP' (Perl regex, not available on all Debian systems)
+# with 'grep -o' + extended regex, which is POSIX-compatible
 log_info "Copying shared libraries..."
 for bin in /ramboot/bin/*; do
-    ldd "$bin" 2>/dev/null | grep -oP '(/[^
-]+)' | while read lib; do
+    ldd "$bin" 2>/dev/null | grep -Eo '(/[^ ]+\.(so[^ ]*))'  | while read -r lib; do
         if [ -f "$lib" ]; then
             DEST_DIR="/ramboot$(dirname "$lib")"
             mkdir -p "$DEST_DIR"
