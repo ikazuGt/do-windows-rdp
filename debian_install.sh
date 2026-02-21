@@ -7,7 +7,10 @@
 # Date: 2026-02-21
 # Tested on: Debian 11 (DigitalOcean Droplets)
 #
-set -euo pipefail
+# FIX 1: Removed 'set -e' — was silently killing script on any minor error
+# FIX 2: Replaced grep -oP with grep -Eo — Perl regex not available on all Debian builds
+#
+set -uo pipefail
 
 # --- COLORS & LOGGING ---
 RED='\e[31m'; GREEN='\e[32m'; YELLOW='\e[33m'; BLUE='\e[34m'; NC='\e[0m'
@@ -29,7 +32,6 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Detect if we're actually on a normal booted system (not recovery)
 if ! grep -q 'debian\|ubuntu' /etc/os-release 2>/dev/null; then
     log_error "This script is designed for Debian/Ubuntu. Detected different OS."
     exit 1
@@ -38,7 +40,6 @@ fi
 # --- 1. GATHER NETWORK INFO BEFORE WE LOSE THE SYSTEM ---
 log_step "STEP 1: Gathering Network Configuration"
 
-# Get the main network interface
 MAIN_IF=$(ip route | awk '/default/ {print $5}' | head -n1)
 if [ -z "$MAIN_IF" ]; then
     log_error "Cannot detect main network interface."
@@ -46,20 +47,17 @@ if [ -z "$MAIN_IF" ]; then
 fi
 log_info "Main Interface: $MAIN_IF"
 
-# Get IP info
 RAW_DATA=$(ip -4 -o addr show dev "$MAIN_IF" | awk '{print $4}' | head -n1)
 CLEAN_IP=${RAW_DATA%/*}
 CLEAN_PREFIX=${RAW_DATA#*/}
 GW=$(ip route | awk '/default/ {print $3}' | head -n1)
 
-# Gateway failsafe
 if [ -z "$GW" ] || [[ "$GW" == "0.0.0.0" ]]; then
     IP_BASE=$(echo "$CLEAN_IP" | cut -d. -f1-3)
     GW="${IP_BASE}.1"
     log_info "Calculated fallback gateway: $GW"
 fi
 
-# Netmask calculation
 case "$CLEAN_PREFIX" in
     8)  SUBNET_MASK="255.0.0.0";;
     16) SUBNET_MASK="255.255.0.0";;
@@ -92,7 +90,6 @@ if [[ "${CONFIRM:-Y}" =~ ^[Nn] ]]; then exit 1; fi
 # --- 2. DETECT DISK ---
 log_step "STEP 2: Detecting Target Disk"
 
-# DigitalOcean typically uses vda, but some use sda
 if [ -b /dev/vda ]; then
     TARGET_DISK="/dev/vda"
 elif [ -b /dev/sda ]; then
@@ -143,7 +140,7 @@ log_success "Dependencies installed."
 # --- 5. PRE-DOWNLOAD CHROME ---
 log_step "STEP 5: Pre-downloading Chrome"
 wget -q --show-progress --progress=bar:force -O /tmp/chrome.msi \
-    "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
+    "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi" || true
 if [ -s "/tmp/chrome.msi" ]; then
     log_success "Chrome downloaded."
 else
@@ -189,7 +186,6 @@ REM --- ADAPTER SELECTION LOGIC ---
 ECHO [LOG] Detecting Network Adapter...
 SET ADAPTER_NAME=
 
-REM Priority: "Ethernet Instance 0"
 netsh interface show interface name="Ethernet Instance 0" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet Instance 0"
@@ -197,7 +193,6 @@ if %errorlevel% EQU 0 (
     goto :configure_network
 )
 
-REM Fallback: "Ethernet"
 netsh interface show interface name="Ethernet" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet"
@@ -205,7 +200,6 @@ if %errorlevel% EQU 0 (
     goto :configure_network
 )
 
-REM Last resort: first connected adapter
 for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connected"') do (
     SET "ADAPTER_NAME=%%b"
     ECHO [OK] Found connected adapter: !ADAPTER_NAME!
@@ -227,7 +221,7 @@ if %errorlevel% EQU 0 (
     ECHO [OK] IP Applied.
 ) else (
     ECHO [WARN] netsh failed, trying PowerShell...
-powershell -Command "Remove-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -Confirm:\$false" >nul 2>&1
+    powershell -Command "Remove-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -Confirm:\$false" >nul 2>&1
     powershell -Command "Remove-NetRoute -InterfaceAlias '%ADAPTER_NAME%' -Confirm:\$false" >nul 2>&1
     powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength ${CLEAN_PREFIX} -DefaultGateway %GW%"
 )
@@ -311,7 +305,7 @@ EOFBATCH
 
 log_success "Windows batch script generated."
 
-# --- 7. BUILD RAM ENVIRONMENT (THE KEY TRICK) ---
+# --- 7. BUILD RAM ENVIRONMENT ---
 log_step "STEP 7: Building RAM Environment (tmpfs pivot)"
 echo ""
 echo "  ┌──────────────────────────────────────────────────────┐"
@@ -330,44 +324,40 @@ log_info "Creating RAM workspace..."
 mkdir -p /ramboot
 mount -t tmpfs -o size=800M tmpfs /ramboot
 
-# Copy all required binaries and libraries into RAM
 log_info "Copying essential tools to RAM..."
 mkdir -p /ramboot/{bin,sbin,lib,lib64,usr,dev,proc,sys,tmp,etc,mnt,run}
 mkdir -p /ramboot/usr/{bin,sbin,lib}
 
-# Copy critical binaries
 for bin in bash sh cat dd gzip gunzip mount umount sync sleep reboot \
-           poweroff wget curl ip awk grep sed cut head partprobe \
+           poweroff wget curl ip awk grep sed cut head seq partprobe \
            ntfsfix mkfs.ntfs mount.ntfs-3g cp mkdir rm ls echo; do
-    SRC=$(which "$bin" 2>/dev/null)
+    SRC=$(which "$bin" 2>/dev/null || true)
     if [ -n "$SRC" ] && [ -f "$SRC" ]; then
         cp -f "$SRC" /ramboot/bin/ 2>/dev/null || true
     fi
 done
 
-# Copy busybox as ultimate fallback
 if command -v busybox &>/dev/null; then
-    cp -f "$(which busybox)" /ramboot/bin/
+    cp -f "$(which busybox)" /ramboot/bin/ || true
 fi
 
-# Copy all shared libraries these binaries need
-# FIX: replaced 'grep -oP' (Perl regex, not available on all Debian systems)
-# with 'grep -o' + extended regex, which is POSIX-compatible
+# FIX: Use grep -Eo (portable) instead of grep -oP (Perl, unavailable on some Debian builds)
+# Also wrapped in || true so a single ldd failure doesn't exit the whole script
 log_info "Copying shared libraries..."
 for bin in /ramboot/bin/*; do
-    ldd "$bin" 2>/dev/null | grep -Eo '(/[^ ]+\.(so[^ ]*))'  | while read -r lib; do
+    ldd "$bin" 2>/dev/null | grep -Eo '/[^ ]+\.so[^ ]*' | while read -r lib; do
         if [ -f "$lib" ]; then
             DEST_DIR="/ramboot$(dirname "$lib")"
             mkdir -p "$DEST_DIR"
             cp -fn "$lib" "$DEST_DIR/" 2>/dev/null || true
         fi
-    done
+    done || true
 done
+log_success "Shared libraries copied."
 
-# Also copy the dynamic linker
 cp -f /lib64/ld-linux-x86-64.so.* /ramboot/lib64/ 2>/dev/null || true
 cp -f /lib/ld-linux-x86-64.so.* /ramboot/lib/ 2>/dev/null || true
-# For lib/x86_64-linux-gnu (Debian style)
+
 if [ -d /lib/x86_64-linux-gnu ]; then
     mkdir -p /ramboot/lib/x86_64-linux-gnu
     cp -af /lib/x86_64-linux-gnu/* /ramboot/lib/x86_64-linux-gnu/ 2>/dev/null || true
@@ -380,16 +370,13 @@ if [ -d /usr/lib/x86_64-linux-gnu ]; then
     cp -af /usr/lib/x86_64-linux-gnu/libfuse* /ramboot/usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
 fi
 
-# Copy required config
 cp -f /etc/resolv.conf /ramboot/etc/ 2>/dev/null || true
 cp -rf /etc/ssl /ramboot/etc/ 2>/dev/null || true
 cp -af /etc/alternatives /ramboot/etc/ 2>/dev/null || true
 
-# Copy temp files we need
 cp -f /tmp/chrome.msi /ramboot/tmp/ 2>/dev/null || true
 cp -f /tmp/win_setup.bat /ramboot/tmp/ 2>/dev/null || true
 
-# Mount essential virtual filesystems
 mount --bind /dev /ramboot/dev
 mount --bind /proc /ramboot/proc
 mount --bind /sys /ramboot/sys
@@ -414,22 +401,18 @@ echo "[RAM] Target: $TARGET_DISK"
 echo "[RAM] Image:  $IMG_URL"
 echo ""
 
-# Kill any processes using the disk
 echo "[RAM] Stopping processes using $TARGET_DISK..."
 fuser -km "${TARGET_DISK}"* 2>/dev/null || true
 sleep 2
 
-# Unmount everything on the target disk
 echo "[RAM] Unmounting all partitions on $TARGET_DISK..."
 for mp in $(mount | grep "$TARGET_DISK" | awk '{print $3}' | sort -r); do
     umount -fl "$mp" 2>/dev/null || true
 done
 sleep 1
 
-# Deactivate swap on the disk
 swapoff "${TARGET_DISK}"* 2>/dev/null || true
 
-# Double-check nothing is mounted
 if mount | grep -q "$TARGET_DISK"; then
     echo "[WARN] Some partitions still mounted, force unmounting..."
     umount -fl "${TARGET_DISK}"* 2>/dev/null || true
@@ -439,13 +422,12 @@ fi
 echo "[RAM] Disk is free. Starting download and write..."
 echo ""
 
-# Write the image directly to disk
 if echo "$IMG_URL" | grep -qiE '\.gz($|\?)'; then
     echo "[RAM] Detected .gz image — streaming decompress to disk..."
-    wget --no-check-certificate -q --show-progress -O- "$IMG_URL" | gunzip | dd of="$TARGET_DISK" bs=4M conv=fsync 2>&1
+    wget --no-check-certificate -q -O- "$IMG_URL" | gunzip | dd of="$TARGET_DISK" bs=4M conv=fsync status=progress 2>&1
 else
     echo "[RAM] Detected raw image — streaming to disk..."
-    wget --no-check-certificate -q --show-progress -O- "$IMG_URL" | dd of="$TARGET_DISK" bs=4M conv=fsync 2>&1
+    wget --no-check-certificate -q -O- "$IMG_URL" | dd of="$TARGET_DISK" bs=4M conv=fsync status=progress 2>&1
 fi
 
 WRITE_STATUS=$?
@@ -459,15 +441,14 @@ fi
 
 echo "[RAM] Image written successfully!"
 
-# Re-read partition table
 echo "[RAM] Re-reading partition table..."
 partprobe "$TARGET_DISK" 2>/dev/null || true
 sleep 5
 
-# Find Windows partition
 echo "[RAM] Looking for Windows NTFS partition..."
 WIN_PART=""
-for i in $(seq 1 10); do
+i=1
+while [ $i -le 10 ]; do
     for p in "${TARGET_DISK}2" "${TARGET_DISK}1" "${TARGET_DISK}p2" "${TARGET_DISK}p1"; do
         if [ -b "$p" ]; then
             WIN_PART="$p"
@@ -477,6 +458,7 @@ for i in $(seq 1 10); do
     echo "  Waiting for partitions... ($i/10)"
     sleep 2
     partprobe "$TARGET_DISK" 2>/dev/null || true
+    i=$((i + 1))
 done
 
 if [ -z "$WIN_PART" ]; then
@@ -488,7 +470,6 @@ fi
 
 echo "[RAM] Found Windows partition: $WIN_PART"
 
-# Fix and mount NTFS
 ntfsfix -d "$WIN_PART" >/dev/null 2>&1 || true
 
 mkdir -p /mnt/win
@@ -502,7 +483,6 @@ fi
 
 echo "[RAM] Windows partition mounted. Injecting files..."
 
-# Inject startup script
 STARTUP_ALL="/mnt/win/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup"
 STARTUP_ADMIN="/mnt/win/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
 mkdir -p "$STARTUP_ALL" "$STARTUP_ADMIN"
@@ -510,7 +490,6 @@ mkdir -p "$STARTUP_ALL" "$STARTUP_ADMIN"
 cp -f /tmp/win_setup.bat "$STARTUP_ALL/win_setup.bat" 2>/dev/null || true
 cp -f /tmp/win_setup.bat "$STARTUP_ADMIN/win_setup.bat" 2>/dev/null || true
 
-# Inject Chrome
 if [ -f /tmp/chrome.msi ]; then
     cp -f /tmp/chrome.msi /mnt/win/chrome.msi 2>/dev/null || true
     echo "[OK] Chrome MSI injected."
@@ -518,7 +497,6 @@ fi
 
 echo "[OK] Startup scripts injected."
 
-# Unmount and reboot
 sync
 umount /mnt/win 2>/dev/null || true
 sync
@@ -532,11 +510,9 @@ echo " Then connect via RDP.                   "
 echo "========================================="
 sleep 5
 
-# Force reboot via kernel
 echo b > /proc/sysrq-trigger
 INNEREOF
 
-# Replace placeholders
 sed -i "s|PLACEHOLDER_DISK|$TARGET_DISK|g" /ramboot/installer.sh
 sed -i "s|PLACEHOLDER_URL|$IMG_URL|g" /ramboot/installer.sh
 chmod +x /ramboot/installer.sh
@@ -554,15 +530,13 @@ echo "  │  The install will continue in the background.   │"
 echo "  │  The VPS will auto-reboot into Windows.         │"
 echo "  │                                                 │"
 echo "  │  Wait ~5-15 minutes, then connect via RDP:      │"
-echo "  IP: $CLEAN_IP"
-echo "  User: Administrator                            │"
-echo "  Pass: Pc@2024                                  │"
+echo "  │  IP:   $CLEAN_IP"
+echo "  │  User: Administrator                            │"
+echo "  │  Pass: Pc@2024                                  │"
 echo "  └─────────────────────────────────────────────────┘"
 echo ""
 sleep 3
 
-# Use nohup + chroot to pivot into RAM and run the installer
-# This ensures it continues even if SSH drops
 cd /ramboot
 nohup chroot /ramboot /bin/bash /installer.sh > /ramboot/install.log 2>&1 &
 INSTALLER_PID=$!
@@ -572,6 +546,5 @@ log_info "You can safely disconnect SSH now."
 log_info "Tailing install log (Ctrl+C to detach — install continues)..."
 echo ""
 
-# Tail the log so user can watch progress if they want
 sleep 2
 tail -f /ramboot/install.log 2>/dev/null || true
