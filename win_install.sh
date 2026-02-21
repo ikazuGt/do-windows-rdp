@@ -149,7 +149,7 @@ if %errorlevel% EQU 0 (
 )
 
 REM CHECK 2: Look specifically for just "Ethernet"
-netsh interface show interface name="Ethernet" >nul 2>&1
+etsh interface show interface name="Ethernet" >nul 2>&1
 if %errorlevel% EQU 0 (
     SET "ADAPTER_NAME=Ethernet"
     ECHO [SUCCESS] Found Standard Adapter: Ethernet
@@ -167,7 +167,7 @@ for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connec
 :configure_network
 if "%ADAPTER_NAME%"=="" (
     ECHO [CRITICAL ERROR] No network adapter found!
-goto :keep_open
+    goto :keep_open
 )
 
 ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%"
@@ -175,7 +175,7 @@ ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%"
 REM --- APPLY IP ---
 ECHO.
 ECHO [LOG] Applying IP Address...
-etsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
+netsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
 if %errorlevel% EQU 0 (
     ECHO [SUCCESS] IP Applied.
 ) else (
@@ -188,7 +188,7 @@ timeout /t 2 /nobreak >nul
 REM --- APPLY DNS ---
 ECHO.
 ECHO [LOG] Applying DNS Settings...
-etsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
+netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
 netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
 
 REM Double check with PowerShell (Force it)
@@ -248,12 +248,18 @@ if exist "C:\chrome.msi" (
     ECHO [INFO] Chrome installer not found, skipping.
 )
 
+REM --- SET PASSWORD ---
+ECHO.
+ECHO [LOG] Setting Administrator password...
+net user Administrator PC@2024 /active:yes
+
 ECHO.
 ECHO ===========================================
 ECHO      SETUP COMPLETE
 ECHO ===========================================
 ECHO IP Address: %IP%
 ECHO Username  : Administrator
+ECHO Password  : Pc@2024
 ECHO.
 
 :keep_open
@@ -298,7 +304,7 @@ done
 [ -z "$target" ] && { log_error "Partition not found."; exit 1; }
 
 log_info "Partition Found: $target. Fixing NTFS..."
-t ntfsfix -d "$target" > /dev/null 2>&1
+tf -d "$target" > /dev/null 2>&1
 
 mkdir -p /mnt/windows
 mount.ntfs-3g -o remove_hiberfile,rw "$target" /mnt/windows || mount.ntfs-3g -o force,rw "$target" /mnt/windows
