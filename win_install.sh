@@ -58,7 +58,6 @@ esac
 # --- 4. NETWORK DETECTION ---
 log_step "STEP 4: Calculating Network Settings"
 
-# Get the raw IP info (excluding local loopback and internal Docker/Private IPs)
 RAW_DATA=$(ip -4 -o addr show | awk '{print $4}' | grep -v "^10\." | grep -v "^127\." | head -n1)
 CLEAN_IP=${RAW_DATA%/*}
 CLEAN_PREFIX=${RAW_DATA#*/}
@@ -83,7 +82,7 @@ case "$CLEAN_PREFIX" in
     26) SUBNET_MASK="255.255.255.192";;
     27) SUBNET_MASK="255.255.255.224";;
     28) SUBNET_MASK="255.255.255.240";;
-    *) SUBNET_MASK="255.255.255.0";; # Default fallback
+    *) SUBNET_MASK="255.255.255.0";;
 esac
 
 echo "   ---------------------------"
@@ -100,7 +99,7 @@ fi
 read -p "Look correct? [Y/n]: " CONFIRM
 if [[ "$CONFIRM" =~ ^[Nn] ]]; then exit 1; fi
 
-# --- 5. GENERATE BATCH FILE (THE FIX) ---
+# --- 5. GENERATE BATCH FILE ---
 log_step "STEP 5: Generating Windows Setup Script"
 
 cat > /tmp/win_setup.bat << 'EOFBATCH'
@@ -167,7 +166,7 @@ for /f "tokens=3*" %%a in ('netsh interface show interface ^| findstr /C:"Connec
 :configure_network
 if "%ADAPTER_NAME%"=="" (
     ECHO [CRITICAL ERROR] No network adapter found!
-goto :keep_open
+    goto :keep_open
 )
 
 ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%"
@@ -175,12 +174,12 @@ ECHO [LOG] Selected Adapter: "%ADAPTER_NAME%"
 REM --- APPLY IP ---
 ECHO.
 ECHO [LOG] Applying IP Address...
-etsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
+netsh interface ip set address name="%ADAPTER_NAME%" source=static addr=%IP% mask=%MASK% gateway=%GW% gwmetric=1
 if %errorlevel% EQU 0 (
     ECHO [SUCCESS] IP Applied.
 ) else (
     ECHO [ERROR] Failed to set IP. Retrying with PowerShell...
-powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength 24 -DefaultGateway %GW%"
+    powershell -Command "New-NetIPAddress -InterfaceAlias '%ADAPTER_NAME%' -IPAddress %IP% -PrefixLength 24 -DefaultGateway %GW%"
 )
 
 timeout /t 2 /nobreak >nul
@@ -188,7 +187,7 @@ timeout /t 2 /nobreak >nul
 REM --- APPLY DNS ---
 ECHO.
 ECHO [LOG] Applying DNS Settings...
-etsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
+netsh interface ip set dns name="%ADAPTER_NAME%" source=static addr=8.8.8.8
 netsh interface ip add dns name="%ADAPTER_NAME%" addr=8.8.4.4 index=2
 
 REM Double check with PowerShell (Force it)
@@ -298,7 +297,7 @@ done
 [ -z "$target" ] && { log_error "Partition not found."; exit 1; }
 
 log_info "Partition Found: $target. Fixing NTFS..."
-t ntfsfix -d "$target" > /dev/null 2>&1
+ntfsfix -d "$target" > /dev/null 2>&1
 
 mkdir -p /mnt/windows
 mount.ntfs-3g -o remove_hiberfile,rw "$target" /mnt/windows || mount.ntfs-3g -o force,rw "$target" /mnt/windows
@@ -319,6 +318,7 @@ log_success "Files injected"
 log_step "STEP 9: Cleaning Up"
 sync
 umount /mnt/windows
+
 echo "===================================================="
 echo "       INSTALLATION SUCCESSFUL!                     "
 echo "===================================================="
