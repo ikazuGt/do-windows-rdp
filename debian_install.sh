@@ -1,9 +1,8 @@
 #!/bin/bash
 #
-# DEBIAN TO WINDOWS - NETWORK-ONLY INJECTOR
+# DEBIAN TO WINDOWS - NETWORK-ONLY INJECTOR (FIXED VERSION)
 # For: Pre-built Windows images with existing users/apps/settings
-# Does NOT modify: Users, Passwords, Apps, Registry settings
-# ONLY injects: Network configuration for first boot
+# Features: Animated progress bar, reliable partition detection
 #
 
 set -uo pipefail
@@ -13,6 +12,23 @@ info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 ok() { echo -e "${GREEN}[OK]${NC} $1"; }
 err() { echo -e "${RED}[ERROR]${NC} $1"; }
 step() { echo -e "\n${YELLOW}>>> $1${NC}"; }
+
+# Progress bar function - shows growing ==== bar
+show_progress() {
+    local duration=$1
+    local prefix=$2
+    local width=50
+    local progress=0
+    
+    while [ $progress -le $width ]; do
+        local filled=$(printf "%${progress}s" | tr ' ' '=')
+        local empty=$(printf "%$((width - progress))s" | tr ' ' ' ')
+        printf "\r%s [%s%s] %d%%" "$prefix" "$filled" "$empty" $((progress * 2))
+        progress=$((progress + 1))
+        sleep $(echo "scale=3; $duration / $width" | bc 2>/dev/null || echo "0.1")
+    done
+    echo ""
+}
 
 clear
 echo "=================================================="
@@ -32,7 +48,6 @@ IP_CIDR=$(ip -4 -o addr show dev "$MAIN_IF" | awk '{print $4}' | head -n1)
 IP=${IP_CIDR%/*}
 PREFIX=${IP_CIDR#*/}
 GW=$(ip route | awk '/default/ {print $3}' | head -n1)
-
 [ -z "$GW" ] && GW="$(echo "$IP" | cut -d. -f1-3).1"
 
 case "$PREFIX" in
@@ -78,20 +93,18 @@ ok "Image: $IMG"
 # --- INSTALL DEPS ---
 step "STEP 4: Installing Tools"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq && apt-get install -y -qq --no-install-recommends wget gzip coreutils util-linux ntfs-3g parted || { err "Failed"; exit 1; }
+apt-get update -qq && apt-get install -y -qq --no-install-recommends wget gzip coreutils util-linux ntfs-3g parted bc || { err "Failed"; exit 1; }
 ok "Ready"
 
 # --- CREATE NETWORK-ONLY SCRIPT ---
 step "STEP 5: Creating Network Configuration Script"
 mkdir -p /tmp/wininject
 
-# This script ONLY sets IP/DNS - no user/password changes
 cat > /tmp/wininject/network-setup.bat << EOF
 @echo off
 echo [*] Configuring Network...
 timeout /t 3 /nobreak >nul
 
-:: Find first connected adapter
 for /f "tokens=1,2,*" %%a in ('netsh interface show interface ^| findstr /i "Connected"') do (
     set "ADAPTER=%%c"
     goto :found
@@ -99,27 +112,22 @@ for /f "tokens=1,2,*" %%a in ('netsh interface show interface ^| findstr /i "Con
 :found
 
 if not defined ADAPTER (
-    echo [!] No adapter found - check drivers
+    echo [!] No adapter found
     goto :end
 )
 
-echo [*] Setting static IP on: %ADAPTER%
+echo [*] Setting IP on: %ADAPTER%
 netsh interface ip set address name="%ADAPTER%" static $IP $MASK $GW 1
-if errorlevel 1 (
-    echo [!] Failed to set IP - may already be configured
-)
-
 netsh interface ip set dns name="%ADAPTER%" static 8.8.8.8
 netsh interface ip add dns name="%ADAPTER%" 8.8.4.4 index=2
-
 ipconfig /flushdns
-echo [*] Network configured: $IP
+echo [*] Done: $IP
 
 :end
 del "%~f0"
 EOF
 
-ok "Network script created (no user/password changes)"
+ok "Network script created"
 
 # --- CONFIRMATION ---
 step "STEP 6: FINAL WARNING"
@@ -130,22 +138,19 @@ echo "  │                                         │"
 echo "  │  Your pre-built Windows image will be   │"
 echo "  │  written with ONLY network config added │"
 echo "  │                                         │"
-echo "  │  Existing in image:                     │"
-echo "  │  - Users and passwords (UNCHANGED)      │"
-echo "  │  - Installed apps (UNCHANGED)           │"
-echo "  │  - Windows settings (UNCHANGED)         │"
+echo "  │  Existing in image (UNCHANGED):         │"
+echo "  │  - Users and passwords                  │"
+echo "  │  - Installed apps                       │"
+echo "  │  - Windows settings                     │"
 echo "  │                                         │"
 echo "  │  ONLY ADDED: Static IP configuration    │"
-echo "  │                                         │"
-echo "  │  After reboot, use YOUR existing        │"
-echo "  │  credentials from the pre-built image   │"
 echo "  └─────────────────────────────────────────┘"
 echo ""
 read -p "Type 'INSTALL' to proceed: " final
 [ "$final" != "INSTALL" ] && { err "Aborted"; exit 1; }
 
 # --- BACKGROUND INSTALLER ---
-step "STEP 7: Starting Background Installation"
+step "STEP 7: Starting Installation"
 
 cat > /tmp/installer.sh << 'INSTALLER'
 #!/bin/bash
@@ -165,6 +170,7 @@ echo "  INSTALLER STARTED: $(date)"
 echo "=========================================="
 
 # Kill disk usage
+echo "[*] Stopping processes..."
 fuser -km "${DISK}"* 2>/dev/null || true
 sleep 2
 
@@ -175,75 +181,223 @@ done
 swapoff -a 2>/dev/null || true
 sleep 2
 
-# Write image
+# Write image with animated progress bar
 echo "[*] Writing image to disk..."
-if ! wget --no-check-certificate --progress=dot:giga -O- "$IMG" 2>/dev/null | gunzip -c | dd of="$DISK" bs=4M status=progress conv=fsync; then
-    echo "[!] Write completed with possible errors"
-fi
-sync
-echo "[*] Write complete"
+echo "[*] This will take 10-30 minutes depending on image size..."
+echo ""
 
-# Probe partitions
-partprobe "$DISK" 2>/dev/null || true
-sleep 5
+# Download and write with progress indication
+# Using wget with dot progress, but we'll show our own bar
+(
+    wget --no-check-certificate --progress=dot:giga -O- "$IMG" 2>/dev/null | \
+    gunzip -c | \
+    dd of="$DISK" bs=4M conv=fsync status=none
+) &
+DD_PID=$!
 
-# Find Windows partition
-WINPART=""
-for try in 1 2 3 4 5; do
-    for part in "${DISK}2" "${DISK}p2" "${DISK}1" "${DISK}p1"; do
-        if [ -b "$part" ] && blkid "$part" 2>/dev/null | grep -qi ntfs; then
-            WINPART="$part"
-            break 2
-        fi
+# Show animated progress bar while download happens
+echo -n "Downloading/Writing: "
+while kill -0 $DD_PID 2>/dev/null; do
+    for i in "=" "==" "===" "====" "=====" "======" "=======" "========" "=========" "==========" "===========" "============" "=============" "==============" "===============" "================" "=================" "==================" "===================" "====================" "====================="; do
+        printf "\r[%-21s] %s" "$i" "In progress..."
+        sleep 0.5
+        if ! kill -0 $DD_PID 2>/dev/null; then break; fi
     done
-    sleep 3
-    partprobe "$DISK" 2>/dev/null || true
 done
+wait $DD_PID
+DD_STATUS=$?
 
-[ -z "$WINPART" ] && { echo "[!] No Windows partition, rebooting..."; force_reboot; }
+if [ $DD_STATUS -ne 0 ]; then
+    echo ""
+    echo "[!] Write completed with warnings (exit code: $DD_STATUS)"
+else
+    echo ""
+    echo "[*] Write complete!"
+fi
 
-echo "[*] Found: $WINPART"
+sync
+sleep 2
 
-# Mount and inject ONLY network script
-mkdir -p /mnt/win
-mount.ntfs-3g -o remove_hiberfile,rw "$WINPART" /mnt/win 2>/dev/null || {
-    echo "[!] Cannot mount, rebooting anyway..."
-    force_reboot
-}
+# CRITICAL FIX: Properly re-read partition table
+echo "[*] Re-reading partition table..."
+blockdev --rereadpt "$DISK" 2>/dev/null || true
+partprobe "$DISK" 2>/dev/null || true
 
-# Try multiple startup locations
-INJECTED=0
-for dir in "/mnt/win/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp" \
-           "/mnt/win/Users/Administrator/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup" \
-           "/mnt/win/Users/Default/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"; do
-    if mkdir -p "$dir" 2>/dev/null; then
-        cp -f /tmp/wininject/network-setup.bat "$dir/" 2>/dev/null && {
-            echo "[*] Injected to: $dir"
-            INJECTED=1
-        }
+# Alternative: use losetup to scan partitions
+echo "[*] Scanning for partitions..."
+losetup -f -P "$DISK" 2>/dev/null || true
+sleep 3
+
+# List what we found
+echo "[*] Partitions detected:"
+lsblk -o NAME,SIZE,FSTYPE,TYPE,MOUNTPOINT | grep -E "(NAME|$DISK|loop)" || true
+fdisk -l "$DISK" 2>/dev/null | head -20 || true
+
+# Find Windows partition - IMPROVED METHOD
+WINPART=""
+
+# Method 1: Look for NTFS partitions using blkid
+echo "[*] Searching for NTFS partitions..."
+for part in $(lsblk -ln -o NAME "$DISK" 2>/dev/null | grep -v "^$(basename $DISK)$"); do
+    fullpart="/dev/$part"
+    if [ -b "$fullpart" ]; then
+        fstype=$(blkid -o value -s TYPE "$fullpart" 2>/dev/null)
+        echo "  Checking: $fullpart -> $fstype"
+        if [ "$fstype" == "ntfs" ]; then
+            WINPART="$fullpart"
+            echo "[*] Found NTFS: $WINPART"
+            break
+        fi
     fi
 done
 
-# Also try Setup\Scripts for OOBE
-if [ -d "/mnt/win/Windows/Setup/Scripts" ]; then
-    cp -f /tmp/wininject/network-setup.bat "/mnt/win/Windows/Setup/Scripts/" 2>/dev/null && {
-        echo "[*] Injected to Setup\Scripts"
+# Method 2: If blkid didn't work, try common partition names
+if [ -z "$WINPART" ]; then
+    echo "[*] Trying common partition names..."
+    if [[ "$DISK" == *"nvme"* ]]; then
+        try_parts="${DISK}p1 ${DISK}p2 ${DISK}p3"
+    else
+        try_parts="${DISK}1 ${DISK}2 ${DISK}3"
+    fi
+    
+    for part in $try_parts; do
+        if [ -b "$part" ]; then
+            echo "  Found: $part"
+            WINPART="$part"
+            break
+        fi
+    done
+fi
+
+# Method 3: Use losetup to create loop devices from the disk image
+if [ -z "$WINPART" ]; then
+    echo "[*] Trying losetup method..."
+    LOOPDEV=$(losetup -f --show -P "$DISK" 2>/dev/null)
+    if [ -n "$LOOPDEV" ]; then
+        sleep 2
+        for part in ${LOOPDEV}p1 ${LOOPDEV}p2 ${LOOPDEV}p3; do
+            if [ -b "$part" ]; then
+                fstype=$(blkid -o value -s TYPE "$part" 2>/dev/null)
+                if [ "$fstype" == "ntfs" ] || [ -z "$fstype" ]; then
+                    WINPART="$part"
+                    echo "[*] Found via loop: $WINPART"
+                    break
+                fi
+            fi
+        done
+    fi
+fi
+
+if [ -z "$WINPART" ]; then
+    echo "[!] CRITICAL: No Windows partition found!"
+    echo "[!] Rebooting anyway - image might still work..."
+    force_reboot
+fi
+
+echo "[*] Selected partition: $WINPART"
+
+# Mount and inject
+mkdir -p /mnt/win
+echo "[*] Mounting NTFS partition..."
+
+if ! mount.ntfs-3g -o remove_hiberfile,rw "$WINPART" /mnt/win 2>/dev/null; then
+    echo "[!] Standard mount failed, trying force..."
+    if ! mount.ntfs-3g -o force,rw "$WINPART" /mnt/win 2>/dev/null; then
+        echo "[!] Cannot mount NTFS. Rebooting without injection..."
+        force_reboot
+    fi
+fi
+
+echo "[*] Mounted successfully"
+echo "[*] Windows directory contents:"
+ls -la /mnt/win/ 2>/dev/null | head -10 || true
+
+# Inject to startup folders
+INJECTED=0
+
+# All Users Startup
+TARGET="/mnt/win/ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp"
+if mkdir -p "$TARGET" 2>/dev/null; then
+    cp -f /tmp/wininject/network-setup.bat "$TARGET/" && {
+        echo "[*] Injected to: All Users Startup"
         INJECTED=1
     }
 fi
 
-[ $INJECTED -eq 0 ] && echo "[!] Warning: Could not inject startup script"
+# Default User Startup
+TARGET="/mnt/win/Users/Default/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+if mkdir -p "$TARGET" 2>/dev/null; then
+    cp -f /tmp/wininject/network-setup.bat "$TARGET/" && {
+        echo "[*] Injected to: Default User Startup"
+        INJECTED=1
+    }
+fi
+
+# Administrator Startup (if exists)
+for admin_dir in /mnt/win/Users/Administrator/ /mnt/win/Users/Admin/; do
+    if [ -d "$admin_dir" ]; then
+        TARGET="${admin_dir}AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup"
+        if mkdir -p "$TARGET" 2>/dev/null; then
+            cp -f /tmp/wininject/network-setup.bat "$TARGET/" && {
+                echo "[*] Injected to: $(basename $admin_dir) Startup"
+                INJECTED=1
+            }
+        fi
+    fi
+done
+
+# Windows Setup Scripts (runs during OOBE)
+if [ -d "/mnt/win/Windows/Setup/Scripts" ] || mkdir -p "/mnt/win/Windows/Setup/Scripts" 2>/dev/null; then
+    cp -f /tmp/wininject/network-setup.bat "/mnt/win/Windows/Setup/Scripts/" && {
+        echo "[*] Injected to: Windows Setup Scripts"
+        INJECTED=1
+    }
+fi
+
+# C:\ root fallback
+cp -f /tmp/wininject/network-setup.bat /mnt/win/network-setup.bat 2>/dev/null && {
+    echo "[*] Placed fallback in C:\\"
+}
+
+if [ $INJECTED -eq 0 ]; then
+    echo "[!] WARNING: Could not inject to startup locations"
+else
+    echo "[*] SUCCESS: Injected to $INJECTED location(s)"
+fi
+
+# Verify injection
+echo "[*] Verifying injected files:"
+find /mnt/win -name "network-setup.bat" 2>/dev/null
 
 sync
+sleep 2
+
+echo "[*] Unmounting..."
 umount /mnt/win 2>/dev/null || true
 
-echo "[*] Done! Rebooting..."
+# Cleanup loop device if used
+if [ -n "${LOOPDEV:-}" ]; then
+    losetup -d "$LOOPDEV" 2>/dev/null || true
+fi
+
+sync
+
+echo ""
+echo "=========================================="
+echo "  INSTALLATION COMPLETE!"
+echo "=========================================="
+echo "  Rebooting in 5 seconds..."
+echo "  Connect via RDP to: ${TARGET_IP}"
+echo "  Use YOUR existing credentials"
+echo "=========================================="
+sleep 5
 force_reboot
 INSTALLER
 
-# Set variables
+# Set variables in installer
 sed -i "s|\${TARGET_DISK}|$DISK|g" /tmp/installer.sh
 sed -i "s|\${TARGET_IMG}|$IMG|g" /tmp/installer.sh
+sed -i "s|\${TARGET_IP}|$IP|g" /tmp/installer.sh
 chmod +x /tmp/installer.sh
 
 # Execute with nohup
@@ -261,11 +415,10 @@ if kill -0 $PID 2>/dev/null; then
     echo "  │                                         │"
     echo "  │  Log: tail -f /tmp/install.log          │"
     echo "  │                                         │"
-    echo "  │  Disconnect SSH and wait ~15 minutes    │"
+    echo "  │  Wait for completion, then RDP to:      │"
+    echo "  │  $IP"
     echo "  │                                         │"
-    echo "  │  Then connect RDP to: $IP"
     echo "  │  Use YOUR existing credentials          │"
-    echo "  │  from the pre-built image               │"
     echo "  └─────────────────────────────────────────┘"
     echo ""
     sleep 3
