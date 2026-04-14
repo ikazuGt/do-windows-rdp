@@ -3,6 +3,7 @@
 # DIGITALOCEAN INSTALLER - FINAL DEBUG VERSION
 # Date: 2025-11-24
 # Fixes: Ethernet Instance 0 priority, DNS locking, Verbose Logging
+#        + RDP Session Busy fix (gpedit/secpol registry equivalents)
 #
 
 # --- LOGGING FUNCTIONS ---
@@ -228,6 +229,36 @@ reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server" /v
 netsh advfirewall firewall set rule group="remote desktop" new enable=Yes >nul
 netsh advfirewall firewall add rule name="RDP_3389" dir=in action=allow protocol=TCP localport=3389 >nul
 ECHO [SUCCESS] RDP Enabled on Port 3389.
+
+REM -------------------------------------------------------
+REM FIX: "RDS is currently busy" error
+REM Registry equivalents of gpedit.msc + secpol.msc edits
+REM -------------------------------------------------------
+ECHO.
+ECHO [LOG] Applying RDP Session Limit Fix...
+
+REM [gpedit] Computer Config > Admin Templates > Windows Components >
+REM          Remote Desktop Services > RD Session Host > Connections >
+REM          "Limit number of connections" -> 999999
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" /v MaxInstanceCount /t REG_DWORD /d 999999 /f >nul
+
+REM [gpedit] Same path > "Restrict RDS to a single session per user" -> Disabled
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" /v fSingleSessionPerUser /t REG_DWORD /d 0 /f >nul
+
+REM [gpedit] Same path > Licensing > "Set the RD licensing mode" -> 2 = Per Device
+REM          (prevents licensing grace-period block from rejecting connections)
+reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" /v LicensingMode /t REG_DWORD /d 2 /f >nul
+
+REM Also apply to direct (non-policy) Terminal Server config as fallback
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v MaxInstanceCount /t REG_DWORD /d 999999 /f >nul
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fSingleSessionPerUser /t REG_DWORD /d 0 /f >nul
+
+REM [secpol] Security Settings > Local Policies > User Rights Assignment >
+REM          "Allow log on through Remote Desktop Services" -> add Administrator
+net localgroup "Remote Desktop Users" "Administrator" /add >nul 2>&1
+
+ECHO [SUCCESS] RDP Session Limits Fixed.
+REM -------------------------------------------------------
 
 REM --- DISABLE ACCOUNT LOCKOUT ---
 ECHO.
